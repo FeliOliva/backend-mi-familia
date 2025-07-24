@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Cheque {
+  id            Int      @id @default(autoincrement())
+  banco         String
+  nroCheque     String   @unique
+  fechaCreacion DateTime @default(now())
+  fechaEmision  DateTime
+  fechaCobro    DateTime
+  monto         Int
+  estado        Int      @default(1)
+  negocioId     Int?
+  negocio       Negocio? @relation(fields: [negocioId], references: [id])
+
+  @@index([negocioId], map: "Cheque_negocioId_fkey")
+}
+
+model Negocio {
+  id                Int           @id @default(autoincrement())
+  nombre            String
+  direccion         String?
+  fechaCreacion     DateTime      @default(now())
+  estado            Int           @default(1)
+  esCuentaCorriente Boolean       @default(false)
+  cheques           Cheque[]
+  entregas          Entregas[]
+  notasCredito      NotaCredito[]
+  ventas            Venta[]
+}
+
+model Caja {
+  id            Int           @id @default(autoincrement())
+  nombre        String
+  fechaCreacion DateTime      @default(now())
+  estado        Int           @default(1)
+  CierreCaja    CierreCaja[]
+  Entregas      Entregas[]
+  NotaCredito   NotaCredito[]
+  usuarios      Usuario[]
+  ventas        Venta[]
+}
+
+model TipoUnidad {
+  id            Int        @id @default(autoincrement())
+  tipo          String
+  fechaCreacion DateTime   @default(now())
+  estado        Int        @default(1)
+  productos     Producto[]
+}
+
+model MetodoPago {
+  id            Int        @id @default(autoincrement())
+  nombre        String
+  fechaCreacion DateTime   @default(now())
+  estado        Int        @default(1)
+  entregas      Entregas[]
+}
+
+model Usuario {
+  id            Int          @id @default(autoincrement())
+  usuario       String
+  password      String
+  rol           Int
+  fechaCreacion DateTime     @default(now())
+  estado        Int          @default(1)
+  cajaId        Int?
+  CierreCaja    CierreCaja[]
+  caja          Caja?        @relation(fields: [cajaId], references: [id])
+  Venta         Venta[]
+
+  @@index([cajaId], map: "Usuario_cajaId_fkey")
+}
+
+model Producto {
+  id            Int            @id @default(autoincrement())
+  nombre        String
+  precio        Int
+  precioInicial Int?
+  fechaCreacion DateTime       @default(now())
+  estado        Int            @default(1)
+  tipoUnidadId  Int?
+  detalleVentas DetalleVenta[]
+  precioLogs    PrecioLog[]
+  tipoUnidad    TipoUnidad?    @relation(fields: [tipoUnidadId], references: [id])
+
+  @@index([tipoUnidadId], map: "Producto_tipoUnidadId_fkey")
+}
+
+model PrecioLog {
+  id            Int      @id @default(autoincrement())
+  precioAntiguo Int
+  fechaAntigua  DateTime @default(now())
+  precioNuevo   Int
+  fechaNueva    DateTime @default(now())
+  estado        Int      @default(1)
+  articuloId    Int
+  articulo      Producto @relation(fields: [articuloId], references: [id])
+
+  @@index([articuloId], map: "PrecioLog_articuloId_fkey")
+}
+
+model Venta {
+  id             Int            @id @default(autoincrement())
+  nroVenta       String
+  total          Int
+  totalPagado    Int            @default(0)
+  restoPendiente Int            @default(0)
+  estadoPago     Int            @default(1)
+  fechaCreacion  DateTime       @default(now())
+  negocioId      Int
+  cajaId         Int?
+  usuarioId      Int?
+  detalles       DetalleVenta[]
+  entregas       Entregas[]     @relation("VentaEntregas")
+  caja           Caja?          @relation(fields: [cajaId], references: [id])
+  negocio        Negocio        @relation(fields: [negocioId], references: [id])
+  usuario        Usuario?       @relation(fields: [usuarioId], references: [id])
+
+  @@index([cajaId], map: "Venta_cajaId_fkey")
+  @@index([negocioId], map: "Venta_negocioId_fkey")
+  @@index([usuarioId], map: "Venta_usuarioId_fkey")
+}
+
+model DetalleVenta {
+  id            Int      @id @default(autoincrement())
+  precio        Int
+  cantidad      Int
+  subTotal      Int
+  fechaCreacion DateTime @default(now())
+  estado        Int      @default(1)
+  ventaId       Int
+  productoId    Int
+  producto      Producto @relation(fields: [productoId], references: [id])
+  venta         Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+
+  @@index([productoId], map: "DetalleVenta_productoId_fkey")
+  @@index([ventaId], map: "DetalleVenta_ventaId_fkey")
+}
+
+model Entregas {
+  id            Int         @id @default(autoincrement())
+  nroEntrega    String
+  monto         Int
+  fechaCreacion DateTime    @default(now())
+  negocioId     Int
+  metodoPagoId  Int?
+  cajaId        Int?
+  ventaId       Int?
+  caja          Caja?       @relation(fields: [cajaId], references: [id])
+  metodoPago    MetodoPago? @relation(fields: [metodoPagoId], references: [id])
+  negocio       Negocio     @relation(fields: [negocioId], references: [id])
+  venta         Venta?      @relation("VentaEntregas", fields: [ventaId], references: [id])
+
+  @@index([cajaId], map: "Entregas_cajaId_fkey")
+  @@index([metodoPagoId], map: "Entregas_metodoPagoId_fkey")
+  @@index([negocioId], map: "Entregas_negocioId_fkey")
+  @@index([ventaId], map: "Entregas_ventaId_fkey")
+}
+
+model NotaCredito {
+  id            Int      @id @default(autoincrement())
+  motivo        String
+  monto         Int
+  fechaCreacion DateTime @default(now())
+  negocioId     Int
+  cajaId        Int?
+  caja          Caja?    @relation(fields: [cajaId], references: [id])
+  negocio       Negocio  @relation(fields: [negocioId], references: [id])
+
+  @@index([cajaId], map: "NotaCredito_cajaId_fkey")
+  @@index([negocioId], map: "NotaCredito_negocioId_fkey")
+}
+
+model CierreCaja {
+  id                   Int                    @id @default(autoincrement())
+  fecha                DateTime               @default(now())
+  usuarioId            Int?
+  cajaId               Int?
+  totalVentas          Int                    @default(0)
+  totalPagado          Int                    @default(0)
+  totalCuentaCorriente Int                    @default(0)
+  totalEfectivo        Int                    @default(0)
+  ingresoLimpio        Int                    @default(0)
+  estado               Int                    @default(0)
+  caja                 Caja?                  @relation(fields: [cajaId], references: [id])
+  usuario              Usuario?               @relation(fields: [usuarioId], references: [id])
+  CierreCajaMetodoPago CierreCajaMetodoPago[]
+
+  @@index([cajaId], map: "CierreCaja_cajaId_fkey")
+  @@index([usuarioId], map: "CierreCaja_usuarioId_fkey")
+}
+
+model CierreCajaMetodoPago {
+  id           Int        @id @default(autoincrement())
+  cierreCajaId Int
+  metodoPago   String
+  total        Int
+  cierreCaja   CierreCaja @relation(fields: [cierreCajaId], references: [id])
+
+  @@index([cierreCajaId], map: "CierreCajaMetodoPago_cierreCajaId_fkey")
+}
