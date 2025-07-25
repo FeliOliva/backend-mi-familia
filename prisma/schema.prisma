@@ -131,7 +131,7 @@ model Venta {
 model DetalleVenta {
   id            Int      @id @default(autoincrement())
   precio        Int
-  cantidad      Int
+  cantidad      Decimal? @db.Decimal(6, 2)
   subTotal      Int
   fechaCreacion DateTime @default(now())
   estado        Int      @default(1)
