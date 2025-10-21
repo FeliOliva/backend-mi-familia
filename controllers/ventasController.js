@@ -118,7 +118,8 @@ const getVentasByNegocio = async (req, res) => {
 
 const addVenta = async (req, res) => {
   try {
-    const { nroVenta, negocioId, cajaId, rol_usuario, detalles, usuarioId} = req.body;
+    const { nroVenta, negocioId, cajaId, rol_usuario, detalles, usuarioId } =
+      req.body;
     if (rol_usuario !== 0 && rol_usuario !== 1 && rol_usuario !== 3) {
       return res
         .status(401)
@@ -147,7 +148,6 @@ const addVenta = async (req, res) => {
       (sum, detalle) => sum + detalle.subTotal,
       0
     );
-
 
     // Crear la venta
     const venta = await ventaModel.addVenta({

@@ -1,33 +1,40 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { cantidadConUnidad } = require("../utils/format");
 
-const getVentas = async (limitNumber, pageNumber) => {
+async function getVentas(limitNumber, pageNumber) {
   try {
     const offset = (pageNumber - 1) * limitNumber;
 
-    const ventas = await prisma.venta.findMany({
+    const ventasRaw = await prisma.venta.findMany({
       skip: offset,
       take: limitNumber,
-      orderBy: {
-        fechaCreacion: 'desc', // <-- Agrega esta línea
-      },
+      orderBy: { fechaCreacion: "desc" },
       include: {
-        negocio: {
-          select: { nombre: true },
-        },
-        caja: {
-          select: { nombre: true },
-        },
+        negocio: { select: { nombre: true } },
+        caja: { select: { nombre: true } },
         detalles: {
           include: {
-            producto: true,
+            producto: {
+              select: {
+                nombre: true,
+                tipoUnidad: { select: { tipo: true } },
+              },
+            },
           },
         },
       },
     });
 
-    const totalVentas = await prisma.venta.count();
+    const ventas = ventasRaw.map((v) => ({
+      ...v,
+      detalles: v.detalles.map((d) => ({
+        ...d,
+        cantidadConUnidad: cantidadConUnidad(d),
+      })),
+    }));
 
+    const totalVentas = await prisma.venta.count();
     return {
       ventas,
       total: totalVentas,
@@ -38,7 +45,7 @@ const getVentas = async (limitNumber, pageNumber) => {
     console.error("Error al obtener las ventas:", error);
     throw new Error("Error al obtener las ventas");
   }
-};
+}
 
 const getNegocioById = async (negocioId) => {
   try {

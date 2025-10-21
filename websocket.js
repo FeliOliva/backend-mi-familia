@@ -72,58 +72,53 @@ function setupWebSocket(server, prisma) {
     return ventasMejoradas;
   };
 
-  wss.on("connection", async (ws, req) => {
-    // Obtener el cajaId de la URL de la conexión
-    const parameters = url.parse(req.url, true);
-    const cajaId = parameters.query.cajaId;
+  const HEARTBEAT_MS = 30000;
+  setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (!ws.isAlive) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, HEARTBEAT_MS);
 
-    if (!cajaId) {
-      console.log("Conexión rechazada: No se proporcionó cajaId");
+  wss.on("connection", async (ws, req) => {
+    ws.isAlive = true;
+    ws.on("pong", () => (ws.isAlive = true));
+    ws.on("error", (err) => console.error("WS error:", err));
+
+    const parameters = url.parse(req.url, true);
+    const rawId = parameters.query.cajaId;
+    const cajaIdNum = Number(rawId);
+    if (!Number.isFinite(cajaIdNum)) {
+      console.log("Conexión rechazada: cajaId inválido:", rawId);
       ws.close();
       return;
     }
+    const key = String(cajaIdNum);
 
-    console.log(`Nueva conexión establecida para caja ID: ${cajaId}`);
+    console.log(`Nueva conexión establecida para caja ID: ${key}`);
 
-    // Almacenar la conexión asociada al cajaId
-    if (!connections[cajaId]) {
-      connections[cajaId] = [];
-    }
-    connections[cajaId].push(ws);
+    if (!connections[key]) connections[key] = [];
+    connections[key].push(ws);
 
-    // Cargar ventas del día para esta caja específica
-    let ventasCaja;
     try {
-      if (!ventasPorCaja[cajaId]) {
-        ventasCaja = await cargarVentasDelDia(cajaId);
-      } else {
-        ventasCaja = ventasPorCaja[cajaId];
-      }
-
-      // Enviar datos iniciales
-      ws.send(
-        JSON.stringify({
-          tipo: "ventas-iniciales",
-          data: ventasCaja,
-        })
-      );
+      const ventasCaja =
+        ventasPorCaja[key] ?? (await cargarVentasDelDia(cajaIdNum)); // ← usa el num
+      ws.send(JSON.stringify({ tipo: "ventas-iniciales", data: ventasCaja }));
     } catch (error) {
       console.error("Error al cargar ventas:", error);
-      // Enviar array vacío en caso de error
-      ws.send(
-        JSON.stringify({
-          tipo: "ventas-iniciales",
-          data: [],
-        })
-      );
+      ws.send(JSON.stringify({ tipo: "ventas-iniciales", data: [] }));
     }
 
-    // Manejar cierre de conexión
-    ws.on("close", () => {
-      console.log(`Conexión cerrada para caja ID: ${cajaId}`);
-      connections[cajaId] = connections[cajaId].filter((conn) => conn !== ws);
-      if (connections[cajaId].length === 0) {
-        delete connections[cajaId];
+    // Cierre de conexión — usa 'key' (no 'cajaId')
+    ws.on("close", (code, reason) => {
+      const reasonStr = reason?.toString?.() || "";
+      console.log(`[WS] Close caja=${key} code=${code} reason=${reasonStr}`);
+
+      connections[key] = (connections[key] || []).filter((c) => c !== ws);
+      if (!connections[key].length) {
+        delete connections[key];
+        delete ventasPorCaja[key]; // limpieza opcional de cache
       }
     });
   });
@@ -131,30 +126,31 @@ function setupWebSocket(server, prisma) {
 
 // Nueva función para enviar venta solo a los clientes de una caja específica
 function enviarNuevaVenta(cajaId, venta) {
-  if (!connections[cajaId]) {
-    console.log(`No hay conexiones activas para la caja ID: ${cajaId}`);
+  const key = String(cajaId);
+  if (!connections[key]) {
+    console.log(`No hay conexiones activas para la caja ${key}`);
     return;
   }
 
   // Añadir la venta al historial de esa caja
-  if (!ventasPorCaja[cajaId]) {
-    ventasPorCaja[cajaId] = [];
+  if (!ventasPorCaja[key]) {
+    ventasPorCaja[key] = [];
   }
-  ventasPorCaja[cajaId].push(venta);
+  ventasPorCaja[key].push(venta);
 
   const mensaje = {
     tipo: "nueva-venta",
     data: venta,
   };
 
-  connections[cajaId].forEach((ws) => {
+  connections[key].forEach((ws) => {
     if (ws.readyState === 1) {
       // 1 = WebSocket.OPEN
       try {
         ws.send(JSON.stringify(mensaje));
       } catch (error) {
         console.error(
-          `Error al enviar mensaje a cliente de caja ${cajaId}:`,
+          `Error al enviar mensaje a cliente de caja ${key}:`,
           error
         );
       }
@@ -163,27 +159,28 @@ function enviarNuevaVenta(cajaId, venta) {
 }
 
 function broadcastNuevaVenta(venta) {
-  if (venta && venta.cajaId) {
-    enviarNuevaVenta(venta.cajaId, venta);
-  } else {
-    Object.keys(connections).forEach((cajaId) => {
-      connections[cajaId].forEach((client) => {
-        if (client.readyState === 1) {
-          try {
-            client.send(JSON.stringify({ tipo: "nueva-venta", data: venta }));
-          } catch (error) {
-            console.error(`Error al enviar mensaje a cliente:`, error);
-          }
+  if (venta && Number.isFinite(Number(venta.cajaId))) {
+    enviarNuevaVenta(venta.cajaId, venta); // enviarNuevaVenta ya castea a String
+    return;
+  }
+  // fallback: broadcast a todas las cajas (poco común, pero ok)
+  for (const cajaId of Object.keys(connections)) {
+    for (const client of connections[cajaId]) {
+      if (client.readyState === 1) {
+        try {
+          client.send(JSON.stringify({ tipo: "nueva-venta", data: venta }));
+        } catch (err) {
+          console.error("Error al enviar mensaje a cliente:", err);
         }
-      });
-    });
+      }
+    }
   }
 }
 
 function eliminarVenta(cajaId, ventaId) {
-  if (!ventasPorCaja[cajaId]) return;
-  // Eliminar del array en memoria
-  ventasPorCaja[cajaId] = ventasPorCaja[cajaId].filter(
+  const key = String(cajaId);
+  if (!ventasPorCaja[key]) return;
+  ventasPorCaja[key] = ventasPorCaja[key].filter(
     (venta) => venta.id !== Number(ventaId)
   );
 
@@ -193,14 +190,14 @@ function eliminarVenta(cajaId, ventaId) {
     data: { id: ventaId },
   };
 
-  if (connections[cajaId]) {
-    connections[cajaId].forEach((ws) => {
+  if (connections[key]) {
+    connections[key].forEach((ws) => {
       if (ws.readyState === 1) {
         try {
           ws.send(JSON.stringify(mensaje));
         } catch (error) {
           console.error(
-            `Error al enviar eliminación a cliente de caja ${cajaId}:`,
+            `Error al enviar eliminación a cliente de caja ${key}:`,
             error
           );
         }
@@ -210,9 +207,10 @@ function eliminarVenta(cajaId, ventaId) {
 }
 
 function actualizarVenta(cajaId, ventaActualizada, tipo = "venta-actualizada") {
-  if (!ventasPorCaja[cajaId]) return;
+  const key = String(cajaId);
+  if (!ventasPorCaja[key]) return;
 
-  ventasPorCaja[cajaId] = ventasPorCaja[cajaId].map((venta) =>
+  ventasPorCaja[key] = ventasPorCaja[key].map((venta) =>
     venta.id === ventaActualizada.id ? ventaActualizada : venta
   );
 
@@ -221,14 +219,14 @@ function actualizarVenta(cajaId, ventaActualizada, tipo = "venta-actualizada") {
     data: ventaActualizada, // <- CORREGIDO AQUÍ
   };
 
-  if (connections[cajaId]) {
-    connections[cajaId].forEach((ws) => {
+  if (connections[key]) {
+    connections[key].forEach((ws) => {
       if (ws.readyState === 1) {
         try {
           ws.send(JSON.stringify(mensaje));
         } catch (error) {
           console.error(
-            `Error al enviar actualización a cliente de caja ${cajaId}:`,
+            `Error al enviar actualización a cliente de caja ${key}:`,
             error
           );
         }
