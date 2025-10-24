@@ -7,14 +7,14 @@ const getPrecioLogs = async (articuloId, limit, page) => {
         console.log("page", page);
         console.log("articuloId", articuloId);
         const offset = (page - 1) * limit;
-        const precioLogs = await prisma.precioLog.findMany({
+        const precioLogs = await prisma.preciolog.findMany({
             where: {
                 articuloId: articuloId
             },
             skip: offset,
             take: limit
         });
-        const totalPrecioLogs = await prisma.precioLog.count({
+        const totalPrecioLogs = await prisma.preciolog.count({
             where: {
                 articuloId: articuloId
             }

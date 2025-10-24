@@ -3,7 +3,7 @@ const prisma = new PrismaClient();
 
 const getTiposUnidades = async () => {
     try {
-        return await prisma.tipoUnidad.findMany();
+        return await prisma.tipounidad.findMany();
     } catch (error) {
         console.error("Error en getTiposUnidades:", error);
         throw new Error("Error al obtener los tipos de unidades");
@@ -12,7 +12,7 @@ const getTiposUnidades = async () => {
 
 const getTiposUnidadesById = async (id) => {
     try {
-        return await prisma.tipoUnidad.findUnique({ where: { id: parseInt(id) } });
+        return await prisma.tipounidad.findUnique({ where: { id: parseInt(id) } });
     } catch (error) {
         console.error("Error consultando tipos de unidades:", error);
         throw error;
@@ -21,7 +21,7 @@ const getTiposUnidadesById = async (id) => {
 
 const addTiposUnidades = async (tipo) => {
     try {
-        return await prisma.tipoUnidad.create({ data: { tipo } });
+        return await prisma.tipounidad.create({ data: { tipo } });
     } catch (error) {
         console.error("Error consultando tipos de unidades:", error);
         throw error;
@@ -30,7 +30,7 @@ const addTiposUnidades = async (tipo) => {
 
 const updateTiposUnidades = async (id, tipo) => {
     try {
-        return await prisma.tipoUnidad.update({
+        return await prisma.tipounidad.update({
             where: { id: parseInt(id) },
             data: { tipo }
         });
@@ -42,7 +42,7 @@ const updateTiposUnidades = async (id, tipo) => {
 
 const updateTipoUnidadesStatus = async (id, estado) => {
     try {
-        return await prisma.tipoUnidad.update({
+        return await prisma.tipounidad.update({
             where: { id: parseInt(id) },
             data: { estado },
         });

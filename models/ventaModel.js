@@ -13,12 +13,12 @@ async function getVentas(limitNumber, pageNumber) {
       include: {
         negocio: { select: { nombre: true } },
         caja: { select: { nombre: true } },
-        detalles: {
+        detalleventa: {
           include: {
             producto: {
               select: {
                 nombre: true,
-                tipoUnidad: { select: { tipo: true } },
+                tipounidad: { select: { tipo: true } },
               },
             },
           },
@@ -28,7 +28,7 @@ async function getVentas(limitNumber, pageNumber) {
 
     const ventas = ventasRaw.map((v) => ({
       ...v,
-      detalles: v.detalles.map((d) => ({
+      detalles: v.detalleventa.map((d) => ({
         ...d,
         cantidadConUnidad: cantidadConUnidad(d),
       })),
@@ -141,7 +141,7 @@ const getVentaById = async (id) => {
         negocio: {
           select: { nombre: true },
         },
-        detalles: {
+        detalleventa: {
           include: {
             producto: {
               select: { nombre: true },
@@ -232,7 +232,7 @@ const addVenta = async (data) => {
         },
       });
 
-      await prisma.detalleVenta.createMany({
+      await prisma.detalleventa.createMany({
         data: data.detalles.map((detalle) => ({
           precio: detalle.precio,
           cantidad: detalle.cantidad,
@@ -257,7 +257,7 @@ const updateVenta = async (data) => {
   try {
     return await prisma.$transaction(async (prisma) => {
       // Eliminar detalles anteriores
-      await prisma.detalleVenta.deleteMany({
+      await prisma.detalleventa.deleteMany({
         where: { ventaId: parseInt(data.id) },
       });
 
@@ -273,7 +273,7 @@ const updateVenta = async (data) => {
       });
 
       // Agregar los nuevos detalles
-      await prisma.detalleVenta.createMany({
+      await prisma.detalleventa.createMany({
         data: data.detalles.map((detalle) => ({
           precio: detalle.precio,
           cantidad: detalle.cantidad,
@@ -296,7 +296,7 @@ const updateVenta = async (data) => {
 
 const dropVenta = async (id) => {
   try {
-    await prisma.detalleVenta.deleteMany({
+    await prisma.detalleventa.deleteMany({
       where: {
         ventaId: parseInt(id),
       },

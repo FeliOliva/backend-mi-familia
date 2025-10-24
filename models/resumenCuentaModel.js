@@ -1,11 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-const getResumenCuentaByNegocio = async (
-  negocioId,
-  startDate,
-  endDate
-) => {
+const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
   const [ventas, entregas, notasCredito] = await Promise.all([
     prisma.venta.findMany({
       where: {
@@ -21,7 +17,7 @@ const getResumenCuentaByNegocio = async (
         fechaCreacion: true,
         total: true,
         cajaId: true,
-        detalles: {
+        detalleventa: {
           // Incluye los detalles de la venta
           select: {
             id: true,
@@ -51,14 +47,14 @@ const getResumenCuentaByNegocio = async (
         monto: true,
         metodoPagoId: true,
         nroEntrega: true,
-        metodoPago: {
+        metodopago: {
           select: { nombre: true },
         },
         fechaCreacion: true,
       },
     }),
 
-    prisma.notaCredito.findMany({
+    prisma.notacredito.findMany({
       where: {
         negocioId,
         fechaCreacion: {
@@ -84,7 +80,7 @@ const getResumenCuentaByNegocio = async (
       monto: v.total,
       metodo_pago: null,
       cajaId: v.cajaId,
-      detalles: v.detalles, // Incluye los detalles en el resultado
+      detalles: v.detalleventa, // Incluye los detalles en el resultado
     })),
     ...entregas.map((e) => ({
       tipo: "Entrega",
@@ -92,7 +88,7 @@ const getResumenCuentaByNegocio = async (
       numero: e.nroEntrega,
       fecha: e.fechaCreacion,
       monto: e.monto,
-      metodo_pago: e.metodoPago?.nombre || null,
+      metodo_pago: e.metodopago?.nombre || null,
     })),
     ...notasCredito.map((nc) => ({
       tipo: "Nota de Crédito",
@@ -149,7 +145,7 @@ const getResumenDia = async (cajaId) => {
             nombre: true,
           },
         },
-        detalles: {
+        detalleventa: {
           select: {
             id: true,
             cantidad: true,
@@ -178,7 +174,7 @@ const getResumenDia = async (cajaId) => {
         monto: true,
         nroEntrega: true,
         cajaId: true,
-        metodoPago: {
+        metodopago: {
           select: { nombre: true },
         },
         negocio: {
@@ -190,7 +186,7 @@ const getResumenDia = async (cajaId) => {
       },
     }),
 
-    prisma.notaCredito.findMany({
+    prisma.notacredito.findMany({
       where: {
         fechaCreacion: {
           gte: startDate,
@@ -222,14 +218,14 @@ const getResumenDia = async (cajaId) => {
       monto: v.total,
       metodo_pago: null,
       negocio: v.negocio,
-      detalles: v.detalles,
+      detalles: v.detalleventa,
     })),
     ...entregas.map((e) => ({
       tipo: "Entrega",
       id: e.id,
       numero: e.nroEntrega,
       monto: e.monto,
-      metodo_pago: e.metodoPago?.nombre || null,
+      metodo_pago: e.metodopago?.nombre || null,
       negocio: e.negocio,
     })),
     ...notasCredito.map((nc) => ({

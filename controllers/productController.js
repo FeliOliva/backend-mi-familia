@@ -9,27 +9,24 @@ const getAllProducts = async (req, res) => {
     res.status(500).json({ error: "Error al obtener los productos" });
   }
 };
+// controllers/productsController.js
 const getProducts = async (req, res) => {
   try {
-    const { page, limit } = req.query;
-    const pageNumber = parseInt(page);
-    const limitNumber = parseInt(limit);
-
-    if (
-      isNaN(pageNumber) ||
-      pageNumber < 1 ||
-      isNaN(limitNumber) ||
-      limitNumber < 1
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Los parámetros de paginación no son válidos" });
-    }
-
-    const productsData = await productsModel.getProducts(
-      limitNumber,
-      pageNumber
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit || "10", 10), 1),
+      100
     );
+
+    const q = (req.query.q || "").trim(); // texto de búsqueda
+    const estado = req.query.estado || "todos"; // "activos" | "inactivos" | "todos"
+
+    const productsData = await productsModel.getProducts({
+      limit,
+      page,
+      q,
+      estado,
+    });
 
     res.status(200).json(productsData);
   } catch (error) {

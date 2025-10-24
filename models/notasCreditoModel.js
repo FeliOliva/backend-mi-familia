@@ -7,7 +7,7 @@ const getNotasCredito = async (limit, page) => {
     page = parseInt(page) || 1;
 
     const offset = (page - 1) * limit;
-    const notasCredito = await prisma.notaCredito.findMany({
+    const notasCredito = await prisma.notacredito.findMany({
       skip: offset,
       take: limit,
       include: {
@@ -18,7 +18,7 @@ const getNotasCredito = async (limit, page) => {
         },
       },
     });
-    const totalNotasCredito = await prisma.notaCredito.count();
+    const totalNotasCredito = await prisma.notacredito.count();
 
     return {
       notasCredito,
@@ -38,7 +38,7 @@ const getNotasCreditoByNegocioId = async (negocioId, limit, page) => {
     page = parseInt(page) || 1;
 
     const offset = (page - 1) * limit;
-    const notasCredito = await prisma.notaCredito.findMany({
+    const notasCredito = await prisma.notacredito.findMany({
       where: { negocioId: parseInt(negocioId) },
       skip: offset,
       take: limit,
@@ -50,7 +50,7 @@ const getNotasCreditoByNegocioId = async (negocioId, limit, page) => {
         },
       },
     });
-    const totalNotasCredito = await prisma.notaCredito.count();
+    const totalNotasCredito = await prisma.notacredito.count();
 
     return {
       notasCredito,
@@ -69,7 +69,7 @@ const getNotasCreditoByNegocioId = async (negocioId, limit, page) => {
 
 const getNotasCreditoById = async (id) => {
   try {
-    return await prisma.notaCredito.findUnique({
+    return await prisma.notacredito.findUnique({
       where: { id: parseInt(id) },
     });
   } catch (error) {
@@ -80,7 +80,7 @@ const getNotasCreditoById = async (id) => {
 
 const addNotasCredito = async (data) => {
   try {
-    return await prisma.notaCredito.create({
+    return await prisma.notacredito.create({
       data,
     });
   } catch (error) {
@@ -91,7 +91,7 @@ const addNotasCredito = async (data) => {
 
 const updateNotasCredito = async (id, motivo, monto) => {
   try {
-    return await prisma.notaCredito.update({
+    return await prisma.notacredito.update({
       where: { id: parseInt(id) },
       data: { motivo, monto },
     });
@@ -103,7 +103,7 @@ const updateNotasCredito = async (id, motivo, monto) => {
 
 const dropNotasCredito = async (id) => {
   try {
-    return await prisma.notaCredito.delete({
+    return await prisma.notacredito.delete({
       where: { id: parseInt(id) },
     });
   } catch (error) {

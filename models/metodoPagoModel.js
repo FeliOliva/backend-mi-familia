@@ -3,7 +3,7 @@ const prisma = new PrismaClient();
 
 const getMetodosPago = async (req, res) => {
     try {
-        const metodosPago = await prisma.metodoPago.findMany();
+        const metodosPago = await prisma.metodopago.findMany();
         return res.status(200).json(metodosPago);
     } catch (error) {
         console.error('Error al obtener los métodos de pago:', error);

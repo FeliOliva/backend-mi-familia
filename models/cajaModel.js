@@ -6,7 +6,7 @@ const getCajas = async () => {
     // Incluye las ventas asociadas a cada caja y suma el total
     const cajas = await prisma.caja.findMany({
       include: {
-        ventas: {
+        venta: {
           select: { total: true, estadoPago: true },
         },
       },
@@ -15,7 +15,7 @@ const getCajas = async () => {
     // Calcula el total solo de ventas cobradas (estadoPago === 2)
     return cajas.map((caja) => ({
       ...caja,
-      totalVentas: caja.ventas
+      totalVentas: caja.venta
         .filter((v) => v.estadoPago === 2)
         .reduce((acc, v) => acc + v.total, 0),
     }));
@@ -27,7 +27,7 @@ const getCajas = async () => {
 
 const crearCierreCaja = async (data) => {
   try {
-    return await prisma.cierreCaja.create({
+    return await prisma.cierrecaja.create({
       data: {
         fecha: new Date(),
         usuario: data.usuarioId
@@ -60,7 +60,7 @@ const crearCierreCaja = async (data) => {
 
 const getDetalleMetodosPorCierre = async (cierreId) => {
   try {
-    return await prisma.cierreCajaMetodoPago.findMany({
+    return await prisma.cierrecajametodopago.findMany({
       where: { cierreCajaId: cierreId },
     });
   } catch (error) {
@@ -71,7 +71,7 @@ const getDetalleMetodosPorCierre = async (cierreId) => {
 
 const getCierresCaja = async () => {
   try {
-    return await prisma.cierreCaja.findMany({
+    return await prisma.cierrecaja.findMany({
       include: {
         usuario: { select: { usuario: true } },
         caja: { select: { nombre: true } },
@@ -86,7 +86,7 @@ const getCierresCaja = async () => {
 
 const crearCierreCajaPendiente = async (cajaId, totalVentas = 0) => {
   try {
-    return await prisma.cierreCaja.create({
+    return await prisma.cierrecaja.create({
       data: {
         fecha: new Date(),
         usuarioId: null,
@@ -107,7 +107,7 @@ const crearCierreCajaPendiente = async (cajaId, totalVentas = 0) => {
 
 const cerrarCierreCajaPendiente = async (cierreId, usuarioId) => {
   try {
-    return await prisma.cierreCaja.update({
+    return await prisma.cierrecaja.update({
       where: { id: cierreId },
       data: {
         estado: "cerrado",
@@ -139,7 +139,7 @@ const getCajaById = async (id) => {
 
 const editarCierreCaja = async (cierreId, estado, totalPagado) => {
   try {
-    const cierre = await prisma.cierreCaja.findUnique({
+    const cierre = await prisma.cierrecaja.findUnique({
       where: { id: cierreId },
     });
 
@@ -149,7 +149,7 @@ const editarCierreCaja = async (cierreId, estado, totalPagado) => {
 
     const nuevoIngresoLimpio = totalPagado - cierre.totalEfectivo;
 
-    const cierreActualizado = await prisma.cierreCaja.update({
+    const cierreActualizado = await prisma.cierrecaja.update({
       where: { id: cierreId },
       data: {
         totalPagado,

@@ -62,7 +62,6 @@ const getChequesByNegocio = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-
     if (cachedData) {
       return res.status(200).json(JSON.parse(cachedData));
     }
@@ -83,7 +82,7 @@ const addCheque = async (req, res) => {
   try {
     const { banco, nroCheque, fechaEmision, fechaCobro, monto, negocioId } =
       req.body;
-
+    console.log("data del cheque en add: ", res.body);
     // Verificar que todos los campos estén presentes
     if (
       !banco ||
@@ -109,11 +108,9 @@ const addCheque = async (req, res) => {
       nroCheque,
       fechaEmision: parseDate(fechaEmision),
       fechaCobro: parseDate(fechaCobro),
-      monto: parseInt(monto, 10),
+      monto: monto,
       negocioId: parseInt(negocioId, 10),
     };
-
-    await clearChequeCache();
     const newCheque = await chequeModel.addCheque(cheque);
 
     res.json(newCheque);
@@ -146,7 +143,6 @@ const updateCheque = async (req, res) => {
       const [day, month, year] = dateString.split("/").map(Number);
       return new Date(year, month - 1, day).toISOString(); // Formato ISO
     };
-    await clearChequeCache();
     const updatedCheque = await chequeModel.updateCheque(id, {
       banco: banco.toUpperCase(),
       nroCheque,

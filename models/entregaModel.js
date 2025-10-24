@@ -173,7 +173,7 @@ const addEntrega = async (data) => {
             nombre: true,
           },
         },
-        metodoPago: {
+        metodopago: {
           select: {
             nombre: true,
           },
@@ -197,7 +197,7 @@ const actualizarVentaPorEntrega = async (ventaId, monto) => {
         caja: {
           select: { nombre: true },
         },
-        detalles: {
+        detalleventa: {
           include: {
             producto: {
               select: { nombre: true }, // importante incluir nombre
@@ -241,7 +241,7 @@ const actualizarVentaPorEntrega = async (ventaId, monto) => {
       include: {
         negocio: { select: { nombre: true } },
         caja: { select: { nombre: true } },
-        detalles: {
+        detalleventa: {
           include: {
             producto: { select: { nombre: true } },
           },
@@ -349,7 +349,7 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
   );
 
   // 1. Cajas cerradas hoy
-  const cierresHoy = await prisma.cierreCaja.findMany({
+  const cierresHoy = await prisma.cierrecaja.findMany({
     where: {
       fecha: {
         gte: inicioDelDia,
@@ -395,7 +395,7 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
         totalEfectivo: 0,
         totalOtros: 0,
         totalEntregado: 0,
-        metodosPago: [],
+        metodospago: [],
       };
     }
 
@@ -407,7 +407,7 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
       cajasMap[cajaId].totalOtros += monto;
     }
 
-    cajasMap[cajaId].metodosPago.push({
+    cajasMap[cajaId].metodospago.push({
       metodoPagoId,
       nombre: metodo?.nombre || `Método ${metodoPagoId}`,
       total: monto,
