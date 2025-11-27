@@ -76,7 +76,7 @@ const getVentaById = async (id) => {
     return await prisma.venta.findUnique({
       where: { id: parseInt(id) },
       include: {
-        detalles: {
+        detalleventa: {
           include: {
             producto: { select: { nombre: true } }, // Incluye nombre del producto
           },
@@ -186,74 +186,46 @@ const addEntrega = async (data) => {
   }
 };
 
-const actualizarVentaPorEntrega = async (ventaId, monto) => {
-  try {
-    const venta = await prisma.venta.findUnique({
-      where: { id: ventaId },
-      include: {
-        negocio: {
-          select: { nombre: true },
-        },
-        caja: {
-          select: { nombre: true },
-        },
-        detalleventa: {
-          include: {
-            producto: {
-              select: { nombre: true }, // importante incluir nombre
-            },
-          },
-        },
-      },
-    });
+// entregaModel.js (o donde tengas la lógica de ventas)
+const actualizarVentaPorEntrega = async (ventaId, montoEntrega) => {
+  const venta = await prisma.venta.findUnique({
+    where: { id: Number(ventaId) },
+  });
 
-    if (!venta) {
-      throw new Error("No se encontró la venta asociada");
-    }
-
-    const nuevoTotalPagado = venta.totalPagado + monto;
-    const nuevoRestoPendiente = venta.total - nuevoTotalPagado;
-
-    let nuevoEstadoPago;
-    let estadoSocket;
-
-    if (nuevoRestoPendiente <= 0) {
-      nuevoEstadoPago = 2;
-      estadoSocket = "venta-pagada";
-    } else {
-      nuevoEstadoPago = 5;
-      estadoSocket = "venta-pagada-parcialmente";
-    }
-
-    // Actualizar solo los campos necesarios
-    await prisma.venta.update({
-      where: { id: ventaId },
-      data: {
-        totalPagado: nuevoTotalPagado,
-        restoPendiente: nuevoRestoPendiente > 0 ? nuevoRestoPendiente : 0,
-        estadoPago: nuevoEstadoPago,
-      },
-    });
-
-    // Volver a consultar con los includes deseados
-    const ventaActualizada = await prisma.venta.findUnique({
-      where: { id: ventaId },
-      include: {
-        negocio: { select: { nombre: true } },
-        caja: { select: { nombre: true } },
-        detalleventa: {
-          include: {
-            producto: { select: { nombre: true } },
-          },
-        },
-      },
-    });
-
-    return { venta: ventaActualizada, estadoSocket };
-  } catch (error) {
-    console.error("Error actualizando venta:", error);
-    throw new Error("Error al actualizar la venta");
+  if (!venta) {
+    throw new Error("Venta no encontrada");
   }
+
+  const totalPagadoAnterior = venta.totalPagado || 0;
+  const totalPagadoNuevo = totalPagadoAnterior + Number(montoEntrega || 0);
+
+  const total = Number(venta.total || 0);
+  const restoPendiente = Math.max(0, total - totalPagadoNuevo);
+
+  let nuevoEstado;
+
+  if (restoPendiente <= 0) {
+    // Se pagó todo
+    nuevoEstado = 2; // COBRADA
+  } else {
+    // Se pagó algo, pero queda pendiente
+    nuevoEstado = 5; // PAGO PARCIAL
+  }
+
+  const ventaActualizada = await prisma.venta.update({
+    where: { id: Number(ventaId) },
+    data: {
+      totalPagado: totalPagadoNuevo,
+      estadoPago: nuevoEstado,
+      restoPendiente, // si lo tenés en el modelo
+    },
+  });
+
+  // esto lo usás en el controller para el socket
+  return {
+    venta: ventaActualizada,
+    estadoSocket: "venta-actualizada",
+  };
 };
 
 const marcarVentaParaPagoOtroDia = async (ventaId) => {
@@ -262,13 +234,22 @@ const marcarVentaParaPagoOtroDia = async (ventaId) => {
       where: { id: ventaId },
       data: { estadoPago: 3 },
       include: {
-        detalles: true,
+        detalleventa: true,
       },
     });
   } catch (error) {
     console.error("Error marcando venta para otro día:", error);
     throw new Error("Error al marcar la venta para pago en otro día");
   }
+};
+const getEntregasPorVenta = async (ventaId) => {
+  return await prisma.entregas.findMany({
+    where: { ventaId },
+    orderBy: { fechaCreacion: "asc" },
+    include: {
+      metodopago: { select: { nombre: true } },
+    },
+  });
 };
 
 const updateEntrega = async (id, monto) => {
@@ -348,46 +329,63 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
     999
   );
 
-  // 1. Cajas cerradas hoy
-  const cierresHoy = await prisma.cierrecaja.findMany({
+  // 1) Último cierre DEFINITIVO (estado = 1) por caja en el día
+  const cierresPorCaja = await prisma.cierrecaja.groupBy({
+    by: ["cajaId"],
     where: {
       fecha: {
         gte: inicioDelDia,
         lte: finDelDia,
       },
+      estado: 1, // solo cierres definitivos (los del admin)
     },
-    select: { cajaId: true },
+    _max: {
+      fecha: true,
+    },
   });
-  const cajasCerradas = cierresHoy.map((c) => c.cajaId);
 
-  // 2. Traer entregas agrupadas por cajaId y metodoPagoId
-  const agrupadas = await prisma.entregas.groupBy({
-    by: ["cajaId", "metodoPagoId"],
+  const ultimoCierrePorCaja = {};
+  cierresPorCaja.forEach((c) => {
+    ultimoCierrePorCaja[c.cajaId] = c._max.fecha;
+  });
+
+  // 2) Todas las entregas del día (sin filtrar por caja todavía)
+  const entregasHoy = await prisma.entregas.findMany({
     where: {
       fechaCreacion: {
         gte: inicioDelDia,
         lte: finDelDia,
       },
-      ...(cajasCerradas.length > 0 && { cajaId: { notIn: cajasCerradas } }),
     },
-    _sum: {
+    select: {
+      cajaId: true,
+      metodoPagoId: true,
       monto: true,
+      fechaCreacion: true,
     },
   });
 
-  // 3. Traer los nombres de métodos de pago
-  const metodos = await prisma.metodoPago.findMany({
+  // 3) Nombres de métodos de pago
+  const metodos = await prisma.metodopago.findMany({
     select: { id: true, nombre: true },
   });
 
-  // 4. Mapear y agrupar por cajaId
   const cajasMap = {};
 
-  agrupadas.forEach((registro) => {
-    const { cajaId, metodoPagoId, _sum } = registro;
-    const metodo = metodos.find((m) => m.id === metodoPagoId);
-    const monto = _sum.monto || 0;
+  // 4) Armar totales de ENTREGAS, excluyendo las anteriores al último cierre definitivo
+  for (const e of entregasHoy) {
+    const cajaId = e.cajaId;
+    const fechaEntrega = e.fechaCreacion;
+    const fechaUltimoCierre = ultimoCierrePorCaja[cajaId];
+
+    // Si ya hubo un cierre definitivo y esta entrega es anterior o igual a ese cierre, no la contamos
+    if (fechaUltimoCierre && fechaEntrega <= fechaUltimoCierre) {
+      continue;
+    }
+
+    const metodo = metodos.find((m) => m.id === e.metodoPagoId);
     const nombreMetodo = metodo?.nombre?.toLowerCase() || "";
+    const monto = e.monto || 0;
 
     if (!cajasMap[cajaId]) {
       cajasMap[cajaId] = {
@@ -395,6 +393,7 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
         totalEfectivo: 0,
         totalOtros: 0,
         totalEntregado: 0,
+        totalCuentaCorriente: 0,
         metodospago: [],
       };
     }
@@ -407,12 +406,59 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
       cajasMap[cajaId].totalOtros += monto;
     }
 
+    // podés agrupar por método si querés, pero para simplificar dejemos un registro por groupBy original
     cajasMap[cajaId].metodospago.push({
-      metodoPagoId,
-      nombre: metodo?.nombre || `Método ${metodoPagoId}`,
+      metodoPagoId: e.metodoPagoId,
+      nombre: metodo?.nombre || `Método ${e.metodoPagoId}`,
       total: monto,
     });
+  }
+
+  // 5) Ventas con deuda (Cuenta Corriente / pago parcial / pago otro día)
+  const ventasConDeuda = await prisma.venta.findMany({
+    where: {
+      fechaCreacion: {
+        gte: inicioDelDia,
+        lte: finDelDia,
+      },
+      // estados que siguen teniendo algo pendiente:
+      // 4 = Cuenta Corriente, 5 = Pago parcial, 3 = Pago otro día
+      estadoPago: { in: [3, 4, 5] },
+    },
+    select: {
+      cajaId: true,
+      total: true,
+      totalPagado: true,
+      fechaCreacion: true,
+    },
   });
+
+  for (const v of ventasConDeuda) {
+    const cajaId = v.cajaId;
+    const fechaVenta = v.fechaCreacion;
+    const fechaUltimoCierre = ultimoCierrePorCaja[cajaId];
+
+    // Si la venta es anterior o igual al último cierre definitivo, no entra en el saldo actual
+    if (fechaUltimoCierre && fechaVenta <= fechaUltimoCierre) {
+      continue;
+    }
+
+    const pendiente = Number(v.total || 0) - Number(v.totalPagado || 0);
+    if (pendiente <= 0) continue;
+
+    if (!cajasMap[cajaId]) {
+      cajasMap[cajaId] = {
+        cajaId,
+        totalEfectivo: 0,
+        totalOtros: 0,
+        totalEntregado: 0,
+        totalCuentaCorriente: 0,
+        metodospago: [],
+      };
+    }
+
+    cajasMap[cajaId].totalCuentaCorriente += pendiente;
+  }
 
   return Object.values(cajasMap);
 };
@@ -430,4 +476,5 @@ module.exports = {
   actualizarVentaPorEntrega,
   marcarVentaParaPagoOtroDia,
   getTotalesEntregasDelDiaPorCaja,
+  getEntregasPorVenta,
 };

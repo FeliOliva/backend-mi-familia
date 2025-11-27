@@ -14,6 +14,7 @@ const crearCierreCaja = async (req, res) => {
   try {
     const usuarioId = req.user.id;
     const data = { ...req.body, usuarioId };
+    console.log("data del cierre de caja: ", data);
     const cierre = await cajaModel.crearCierreCaja(data);
     res.status(201).json(cierre);
   } catch (error) {
@@ -23,12 +24,12 @@ const crearCierreCaja = async (req, res) => {
 const editarCierreCaja = async (req, res) => {
   try {
     const cierreId = parseInt(req.params.id);
-    const { totalPagado, estado } = req.body;
+    const { ingresoLimpio, estado } = req.body;
 
     const cierreActualizado = await cajaModel.editarCierreCaja(
       cierreId,
-      estado,
-      totalPagado
+      ingresoLimpio,
+      estado
     );
 
     res.json(cierreActualizado);
@@ -54,6 +55,7 @@ const getDetalleMetodosPorCierre = async (req, res) => {
 const getCierresCaja = async (req, res) => {
   try {
     const cierres = await cajaModel.getCierresCaja();
+    console.log("cierres", cierres);
     res.status(200).json(cierres);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener cierres de caja" });
@@ -86,6 +88,22 @@ const getCajaById = async (req, res) => {
     res.status(500).json({ error: "Error al obtener la caja" });
   }
 };
+const getDetalleVentasPorCierre = async (req, res) => {
+  try {
+    const cierreId = parseInt(req.params.id, 10);
+    if (isNaN(cierreId)) {
+      return res.status(400).json({ error: "ID de cierre inválido" });
+    }
+
+    const detalle = await cajaModel.getDetalleVentasPorCierre(cierreId);
+    res.json(detalle);
+  } catch (error) {
+    console.error("Error al obtener detalle de ventas del cierre:", error);
+    res
+      .status(500)
+      .json({ error: "Error al obtener detalle de ventas del cierre" });
+  }
+};
 
 module.exports = {
   getCaja,
@@ -95,4 +113,5 @@ module.exports = {
   getCajaById,
   getDetalleMetodosPorCierre,
   editarCierreCaja,
+  getDetalleVentasPorCierre,
 };

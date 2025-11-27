@@ -4,8 +4,17 @@ const entregasControllers = require("../controllers/entregasControllers");
 const { verifyToken } = require("../auth");
 
 router.get("/entregas", verifyToken, entregasControllers.getEntregas);
-router.get("/entregas/totales-dia-caja", verifyToken, entregasControllers.getTotalesEntregasDelDiaPorCaja);
+router.get(
+  "/entregas/totales-dia-caja",
+  verifyToken,
+  entregasControllers.getTotalesEntregasDelDiaPorCaja
+);
 router.get("/entregas/:id", verifyToken, entregasControllers.getEntregaById);
+router.get(
+  "/entregas/venta/:ventaId",
+  verifyToken,
+  entregasControllers.getEntregasPorVenta
+);
 router.get(
   "/entregas/negocio/:negocioId",
   verifyToken,

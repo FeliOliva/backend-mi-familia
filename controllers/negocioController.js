@@ -46,8 +46,9 @@ const getNegocioById = async (req, res) => {
 };
 const addNegocio = async (req, res) => {
   try {
-    const { nombre, direccion, esCuentaCorriente, rol_usuario } = req.body;
-    if (![0, 3].includes(rol_usuario)) {
+    const { nombre, direccion, esCuentaCorriente, esEditable, rol_usuario } =
+      req.body;
+    if (![0, 1].includes(rol_usuario)) {
       return res
         .status(403)
         .json({ error: "No tienes permiso para realizar esta acción" });
@@ -61,7 +62,8 @@ const addNegocio = async (req, res) => {
     const newNegocio = await negocioModel.addNegocio({
       nombre: nombre.toUpperCase(),
       direccion: direccion.toUpperCase(),
-      esCuentaCorriente: esCuentaCorriente,
+      esCuentaCorriente: !!esCuentaCorriente,
+      esEditable: !!esEditable, // ⬅️ nuevo
     });
     res.json(newNegocio);
   } catch (error) {
@@ -76,7 +78,8 @@ const updateNegocio = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-    const { nombre, direccion, rol_usuario } = req.body;
+    const { nombre, direccion, esCuentaCorriente, esEditable, rol_usuario } =
+      req.body;
     if (rol_usuario !== 0) {
       return res
         .status(403)
@@ -96,6 +99,8 @@ const updateNegocio = async (req, res) => {
     await negocioModel.updateNegocio(id, {
       nombre: nombre.toUpperCase(),
       direccion: direccion.toUpperCase(),
+      esCuentaCorriente,
+      esEditable,
     });
     res.status(200).json({ message: "Negocio actualizado correctamente" });
   } catch (error) {

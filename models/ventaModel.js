@@ -253,39 +253,101 @@ const addVenta = async (data) => {
   }
 };
 
-const updateVenta = async (data) => {
+const updateVenta = async (id, data) => {
   try {
-    return await prisma.$transaction(async (prisma) => {
-      // Eliminar detalles anteriores
-      await prisma.detalleventa.deleteMany({
-        where: { ventaId: parseInt(data.id) },
-      });
+    const ventaId = parseInt(id);
 
-      // Actualizar la venta
-      const ventaActualizada = await prisma.venta.update({
-        where: { id: parseInt(data.id) },
-        data: {
-          nroVenta: data.nroVenta,
-          total: data.total,
-          negocioId: data.negocioId,
-          cajaId: data.cajaId || null,
+    return await prisma.$transaction(async (tx) => {
+      // 1) Traer venta original (para tener caja anterior, totalPagado, etc.)
+      const ventaOriginal = await tx.venta.findUnique({
+        where: { id: ventaId },
+        select: {
+          id: true,
+          nroVenta: true,
+          totalPagado: true,
+          restoPendiente: true,
+          estadoPago: true,
+          negocioId: true,
+          cajaId: true,
         },
       });
 
-      // Agregar los nuevos detalles
-      await prisma.detalleventa.createMany({
-        data: data.detalles.map((detalle) => ({
-          precio: detalle.precio,
-          cantidad: detalle.cantidad,
-          subTotal: detalle.subTotal,
-          ventaId: ventaActualizada.id,
+      if (!ventaOriginal) {
+        throw new Error("Venta no encontrada");
+      }
+
+      const cajaAnterior = ventaOriginal.cajaId;
+
+      // 2) Preparar detalles nuevos
+      const detallesInput = Array.isArray(data.detalles) ? data.detalles : [];
+
+      const detallesProcesados = detallesInput.map((detalle) => {
+        const cantidadNum =
+          typeof detalle.cantidad === "string"
+            ? Number(detalle.cantidad)
+            : Number(detalle.cantidad || 0);
+
+        const precioNum = Number(detalle.precio || 0);
+        const subTotalCalc =
+          detalle.subTotal != null
+            ? Number(detalle.subTotal)
+            : cantidadNum * precioNum;
+
+        return {
+          precio: precioNum,
+          cantidad: cantidadNum,
+          subTotal: subTotalCalc,
           productoId: detalle.productoId,
+        };
+      });
+
+      const totalRecalculado = detallesProcesados.reduce(
+        (sum, d) => sum + d.subTotal,
+        0
+      );
+
+      const totalPagado = ventaOriginal.totalPagado || 0;
+      const restoPendiente = Math.max(0, totalRecalculado - totalPagado);
+
+      // Opcional: podrías recalcular estadoPago según restoPendiente/totalPagado.
+      // Por ahora respetamos el estado actual para no romper tu lógica.
+      const estadoPago = ventaOriginal.estadoPago;
+
+      // 3) Borrar detalles viejos
+      await tx.detalleventa.deleteMany({
+        where: { ventaId },
+      });
+
+      // 4) Actualizar cabecera de venta
+      const ventaActualizada = await tx.venta.update({
+        where: { id: ventaId },
+        data: {
+          nroVenta: data.nroVenta ?? ventaOriginal.nroVenta,
+          total: totalRecalculado,
+          totalPagado,
+          restoPendiente,
+          estadoPago,
+          negocioId: data.negocioId ?? ventaOriginal.negocioId,
+          cajaId: data.cajaId ?? ventaOriginal.cajaId,
+        },
+        include: {
+          negocio: { select: { id: true, nombre: true } },
+        },
+      });
+
+      // 5) Crear nuevos detalles
+      await tx.detalleventa.createMany({
+        data: detallesProcesados.map((d) => ({
+          ...d,
+          ventaId: ventaActualizada.id,
         })),
       });
 
+      // 6) Volvemos un objeto “simple” para el controller
       return {
         ...ventaActualizada,
-        detalles: data.detalles,
+        detalles: detallesProcesados,
+        cajaAnterior,
       };
     });
   } catch (error) {

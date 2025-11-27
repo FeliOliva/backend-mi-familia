@@ -27,6 +27,9 @@ const getCajas = async () => {
 
 const crearCierreCaja = async (data) => {
   try {
+    // 👇 aceptar tanto 'metodoPago' como 'metodosPago'
+    const listaMetodos = data.metodoPago || data.metodosPago || [];
+
     return await prisma.cierrecaja.create({
       data: {
         fecha: new Date(),
@@ -40,16 +43,18 @@ const crearCierreCaja = async (data) => {
         totalEfectivo: data.totalEfectivo || 0,
         ingresoLimpio: data.ingresoLimpio || 0,
         estado: data.estado || 0,
-        CierreCajaMetodoPago: {
-          create:
-            data.metodosPago?.map((metodo) => ({
-              metodoPago: metodo.nombre,
-              total: metodo.total,
-            })) || [],
-        },
+        cierrecajametodopago:
+          listaMetodos.length > 0
+            ? {
+                create: listaMetodos.map((metodo) => ({
+                  metodoPago: metodo.nombre,
+                  total: metodo.total,
+                })),
+              }
+            : undefined,
       },
       include: {
-        CierreCajaMetodoPago: true,
+        cierrecajametodopago: true,
       },
     });
   } catch (error) {
@@ -126,7 +131,7 @@ const getCajaById = async (id) => {
     return await prisma.caja.findUnique({
       where: { id },
       include: {
-        ventas: {
+        venta: {
           select: { total: true, estadoPago: true },
         },
       },
@@ -137,7 +142,7 @@ const getCajaById = async (id) => {
   }
 };
 
-const editarCierreCaja = async (cierreId, estado, totalPagado) => {
+const editarCierreCaja = async (cierreId, ingresoLimpio, estado) => {
   try {
     const cierre = await prisma.cierrecaja.findUnique({
       where: { id: cierreId },
@@ -147,14 +152,11 @@ const editarCierreCaja = async (cierreId, estado, totalPagado) => {
       throw new Error("Cierre no encontrado");
     }
 
-    const nuevoIngresoLimpio = totalPagado - cierre.totalEfectivo;
-
     const cierreActualizado = await prisma.cierrecaja.update({
       where: { id: cierreId },
       data: {
-        totalPagado,
+        ingresoLimpio: ingresoLimpio,
         estado: estado,
-        ingresoLimpio: nuevoIngresoLimpio,
       },
     });
 
@@ -162,6 +164,71 @@ const editarCierreCaja = async (cierreId, estado, totalPagado) => {
   } catch (error) {
     console.error("Error al editar cierre de caja:", error);
     throw new Error("Error al editar cierre de caja");
+  }
+};
+
+const getDetalleVentasPorCierre = async (cierreId) => {
+  try {
+    const cierre = await prisma.cierrecaja.findUnique({
+      where: { id: cierreId },
+      select: { id: true, fecha: true, cajaId: true },
+    });
+
+    if (!cierre) {
+      throw new Error("Cierre no encontrado");
+    }
+
+    const fecha = cierre.fecha;
+    const inicioDelDia = new Date(
+      fecha.getFullYear(),
+      fecha.getMonth(),
+      fecha.getDate()
+    );
+    const finDelDia = new Date(
+      fecha.getFullYear(),
+      fecha.getMonth(),
+      fecha.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+    const entregas = await prisma.entregas.findMany({
+      where: {
+        cajaId: cierre.cajaId,
+        fechaCreacion: {
+          gte: inicioDelDia,
+          lte: finDelDia,
+        },
+      },
+      select: {
+        id: true,
+        monto: true,
+        ventaId: true,
+        metodopago: { select: { nombre: true } },
+        venta: {
+          select: {
+            nroVenta: true,
+            negocio: { select: { nombre: true } },
+          },
+        },
+      },
+      orderBy: { fechaCreacion: "asc" },
+    });
+
+    // Normalizamos a un formato simple para el front
+    return entregas.map((e) => ({
+      entregaId: e.id,
+      ventaId: e.ventaId,
+      nroVenta: e.venta?.nroVenta || null,
+      negocioNombre: e.venta?.negocio?.nombre || null,
+      metodoPago: e.metodopago?.nombre || "SIN MÉTODO",
+      monto: Number(e.monto || 0),
+    }));
+  } catch (error) {
+    console.error("Error al obtener detalle de ventas del cierre:", error);
+    throw new Error("Error al obtener detalle de ventas del cierre");
   }
 };
 
@@ -174,4 +241,5 @@ module.exports = {
   cerrarCierreCajaPendiente,
   getDetalleMetodosPorCierre,
   editarCierreCaja,
+  getDetalleVentasPorCierre,
 };

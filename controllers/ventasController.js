@@ -120,7 +120,8 @@ const addVenta = async (req, res) => {
   try {
     const { nroVenta, negocioId, cajaId, rol_usuario, detalles, usuarioId } =
       req.body;
-    if (rol_usuario !== 0 && rol_usuario !== 1 && rol_usuario !== 3) {
+    console.log("body en addventa: ", req.body);
+    if (rol_usuario !== 0 && rol_usuario !== 1) {
       return res
         .status(401)
         .json({ error: "No tienes permiso para realizar esta acción" });
@@ -188,6 +189,44 @@ const dropVenta = async (req, res) => {
     res.status(500).json({ error: "Error al eliminar la venta" });
   }
 };
+const updateVenta = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ventaUpdates = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: "El id es obligatorio" });
+    }
+
+    // 1) Actualizar en DB
+    const updated = await ventaModel.updateVenta(id, ventaUpdates);
+
+    const { cajaAnterior, ...ventaActualizada } = updated;
+
+    // 2) Obtener venta completa (con detalles y negocio) para el WebSocket
+    const ventaConRelaciones = await ventaModel.getVentaById(
+      ventaActualizada.id
+    );
+
+    // 3) WebSocket: sacar de la caja anterior y agregar a la nueva
+
+    // Si antes tenía caja, eliminarla de esa caja
+    if (cajaAnterior) {
+      eliminarVenta(cajaAnterior, ventaActualizada.id);
+    }
+
+    // Si ahora tiene caja, volver a emitirla como "nueva-venta"
+    if (ventaActualizada.cajaId) {
+      broadcastNuevaVenta(ventaConRelaciones);
+    }
+
+    // 4) Responder al front
+    res.status(200).json(ventaActualizada);
+  } catch (error) {
+    console.error("Error al actualizar la venta:", error);
+    res.status(500).json({ error: "Error al actualizar la venta" });
+  }
+};
 
 module.exports = {
   getVentas,
@@ -197,4 +236,5 @@ module.exports = {
   getVentasByNegocio,
   getVentasByNegocioId,
   getVentasPendientes,
+  updateVenta,
 };

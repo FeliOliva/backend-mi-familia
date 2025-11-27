@@ -114,6 +114,7 @@ model negocio {
   fechaCreacion     DateTime      @default(now())
   estado            Int           @default(1)
   esCuentaCorriente Boolean       @default(false)
+  esEditable        Boolean       @default(false)
   cheque            cheque[]
   entregas          entregas[]
   notacredito       notacredito[]

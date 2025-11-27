@@ -99,12 +99,28 @@ const getEntregaById = async (req, res) => {
     if (!id) {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
+    console.log("id de la entrega", id);
 
     const entregaData = await entregaModel.getEntregaById(id);
     res.json(entregaData);
   } catch (error) {
     console.error("Error al obtener la entrega por id:", error);
     res.status(500).json({ error: "Error al obtener la entrega por id" });
+  }
+};
+
+const getEntregasPorVenta = async (req, res) => {
+  try {
+    const ventaId = parseInt(req.params.ventaId, 10);
+    if (!ventaId) {
+      return res.status(400).json({ error: "ventaId inválido" });
+    }
+
+    const entregas = await entregaModel.getEntregasPorVenta(ventaId);
+    res.json(entregas);
+  } catch (error) {
+    console.error("Error al obtener entregas por venta:", error);
+    res.status(500).json({ error: "Error al obtener entregas por venta" });
   }
 };
 
@@ -283,4 +299,5 @@ module.exports = {
   updateEntrega,
   cambiarEstadoVenta,
   getTotalesEntregasDelDiaPorCaja,
+  getEntregasPorVenta,
 };

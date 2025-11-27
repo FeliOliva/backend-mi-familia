@@ -21,6 +21,7 @@ router.get(
 );
 router.get("/ventas/:id", verifyToken, ventasController.getVentaById);
 router.post("/ventas", verifyToken, ventasController.addVenta);
+router.put("/ventas/:id", verifyToken, ventasController.updateVenta);
 router.delete("/ventas/:id", verifyToken, ventasController.dropVenta);
 
 module.exports = router;
