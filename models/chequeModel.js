@@ -81,14 +81,14 @@ const getChequesByNegocio = async (negocioId, limit, page) => {
 };
 const addCheque = async (cheque) => {
   try {
-    return await prisma.cheque.create({
-      data: cheque,
-    });
+    return await prisma.cheque.create({ data: cheque });
   } catch (error) {
     console.error("Error añadiendo el cheque:", error);
-    throw new Error("Error al añadir el cheque");
+    // Re-lanzamos el error original para poder chequear error.code en el controller
+    throw error;
   }
 };
+
 const updateCheque = async (id, cheque) => {
   try {
     return await prisma.cheque.update({

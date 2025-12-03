@@ -16,10 +16,13 @@ function normalizeVenta(dbVenta) {
     estado: d.estado,
     ventaId: d.ventaId,
     productoId: d.productoId,
-    // campo que espera el front:
     nombreProducto: d.producto?.nombre || "Producto sin nombre",
-    // por compatibilidad:
-    producto: d.producto ? { nombre: d.producto.nombre } : undefined,
+    producto: d.producto
+      ? {
+          nombre: d.producto.nombre,
+          unidad: d.producto?.tipounidad?.tipo || null,
+        }
+      : undefined,
   }));
 
   return {
@@ -34,8 +37,8 @@ function normalizeVenta(dbVenta) {
     cajaId: dbVenta.cajaId,
     usuarioId: dbVenta.usuarioId,
     negocio: dbVenta.negocio ? { nombre: dbVenta.negocio.nombre } : undefined,
-    // lo que consumen los componentes:
     detalles,
+    fueAplazadaOParcial: false, // 👈 default
   };
 }
 
@@ -48,14 +51,24 @@ function setupWebSocket(server, prisma) {
     const mañana = new Date(hoy);
     mañana.setDate(hoy.getDate() + 1);
 
-    // 1) ventas de hoy (cualquier estado)
+    // 1) ventas de HOY (cualquier estado)
     const ventasDelDia = await prisma.venta.findMany({
       where: {
         fechaCreacion: { gte: hoy, lt: mañana },
         cajaId: Number(cajaId),
       },
       include: {
-        detalleventa: { include: { producto: { select: { nombre: true } } } },
+        detalleventa: {
+          include: {
+            producto: {
+              include: {
+                tipounidad: {
+                  select: { tipo: true },
+                },
+              },
+            },
+          },
+        },
         negocio: { select: { nombre: true } },
       },
     });
@@ -68,13 +81,79 @@ function setupWebSocket(server, prisma) {
         estadoPago: { in: [1, 3, 5] },
       },
       include: {
-        detalleventa: { include: { producto: { select: { nombre: true } } } },
+        detalleventa: {
+          include: {
+            producto: {
+              include: {
+                tipounidad: {
+                  select: { tipo: true },
+                },
+              },
+            },
+          },
+        },
         negocio: { select: { nombre: true } },
       },
     });
 
-    // normalizar
-    const ventas = [...ventasDelDia, ...otrasVentas].map(normalizeVenta);
+    // 3) ventas viejas (fecha < hoy) que se COBRARON HOY (estadoPago = 2)
+    //    es decir: tienen al menos una entrega con fecha de hoy
+    const ventasPreviasCobradasHoy = await prisma.venta.findMany({
+      where: {
+        fechaCreacion: { lt: hoy },
+        cajaId: Number(cajaId),
+        estadoPago: 2,
+        // 👇 importante: el nombre correcto de la relación es "entregas"
+        entregas: {
+          some: {
+            fechaCreacion: { gte: hoy, lt: mañana },
+          },
+        },
+      },
+      include: {
+        detalleventa: {
+          include: {
+            producto: {
+              include: {
+                tipounidad: {
+                  select: { tipo: true },
+                },
+              },
+            },
+          },
+        },
+        negocio: { select: { nombre: true } },
+      },
+    });
+
+    // Unimos todo, evitando duplicados por id
+    const ventasDb = [
+      ...ventasDelDia,
+      ...otrasVentas,
+      ...ventasPreviasCobradasHoy.filter(
+        (v) =>
+          !ventasDelDia.some((x) => x.id === v.id) &&
+          !otrasVentas.some((x) => x.id === v.id)
+      ),
+    ];
+
+    // Normalizamos y marcamos especiales
+    const ventas = ventasDb.map((v) => {
+      const base = normalizeVenta(v);
+
+      // si está aplazada o parcial
+      if (v.estadoPago === 3 || v.estadoPago === 5) {
+        base.fueAplazadaOParcial = true;
+      }
+
+      // si es vieja (fecha < hoy) pero está cobrada (2)
+      // y apareció en ventasPreviasCobradasHoy, también la marcamos
+      if (v.fechaCreacion < hoy && v.estadoPago === 2) {
+        base.fueAplazadaOParcial = true;
+      }
+
+      return base;
+    });
 
     ventasPorCaja[cajaId] = ventas;
     return ventas;
@@ -177,7 +256,20 @@ function actualizarVenta(
   const key = String(cajaId);
   if (!ventasPorCaja[key]) return;
 
-  const venta = normalizeVenta(dbVentaActualizada);
+  // Buscar la versión anterior en memoria
+  const anterior = ventasPorCaja[key].find(
+    (v) => v.id === Number(dbVentaActualizada.id)
+  );
+  const ventaNormalizada = normalizeVenta(dbVentaActualizada);
+  const fueAplazadaOParcial =
+    anterior?.fueAplazadaOParcial ||
+    anterior?.estadoPago === 3 ||
+    anterior?.estadoPago === 5;
+
+  const venta = {
+    ...ventaNormalizada,
+    fueAplazadaOParcial,
+  };
   ventasPorCaja[key] = ventasPorCaja[key].map((v) =>
     v.id === venta.id ? venta : v
   );

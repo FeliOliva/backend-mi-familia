@@ -82,7 +82,8 @@ const addCheque = async (req, res) => {
   try {
     const { banco, nroCheque, fechaEmision, fechaCobro, monto, negocioId } =
       req.body;
-    console.log("data del cheque en add: ", res.body);
+    console.log("data del cheque en add: ", req.body);
+
     // Verificar que todos los campos estén presentes
     if (
       !banco ||
@@ -97,10 +98,10 @@ const addCheque = async (req, res) => {
         .json({ error: "Todos los campos son obligatorios" });
     }
 
-    // Función para convertir "DD/MM/YYYY" a formato ISO
+    // Función para convertir "DD/MM/YYYY" a Date
     const parseDate = (dateString) => {
       const [day, month, year] = dateString.split("/").map(Number);
-      return new Date(year, month - 1, day).toISOString(); // Formato ISO
+      return new Date(year, month - 1, day);
     };
 
     const cheque = {
@@ -108,15 +109,28 @@ const addCheque = async (req, res) => {
       nroCheque,
       fechaEmision: parseDate(fechaEmision),
       fechaCobro: parseDate(fechaCobro),
-      monto: monto,
+      monto: parseInt(monto, 10),
       negocioId: parseInt(negocioId, 10),
     };
+
     const newCheque = await chequeModel.addCheque(cheque);
 
-    res.json(newCheque);
+    return res.json(newCheque);
   } catch (error) {
     console.error("Error al agregar cheque:", error);
-    res.status(500).json({ error: "Error al agregar cheque" });
+
+    // Si Prisma devuelve P2002 (duplicado)
+    if (
+      error.code === "P2002" &&
+      error.meta?.target === "Cheque_nroCheque_key"
+    ) {
+      return res.status(400).json({
+        error:
+          "Ya existe un cheque con ese número. Verificá el número ingresado.",
+      });
+    }
+
+    return res.status(500).json({ error: "Error al agregar cheque" });
   }
 };
 

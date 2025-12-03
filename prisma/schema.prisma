@@ -23,6 +23,7 @@ model cheque {
   id            Int      @id @default(autoincrement())
   banco         String
   nroCheque     String   @unique(map: "Cheque_nroCheque_key")
+  nroEntrega    String? // 👈 nuevo campo para identificar internamente
   fechaCreacion DateTime @default(now())
   fechaEmision  DateTime
   fechaCobro    DateTime
