@@ -150,26 +150,51 @@ model preciolog {
 }
 
 model producto {
-  id            Int            @id @default(autoincrement())
+  id            Int             @id @default(autoincrement())
   nombre        String
   precio        Int
   precioInicial Int?
-  fechaCreacion DateTime       @default(now())
-  estado        Int            @default(1)
+  fechaCreacion DateTime        @default(now())
+  estado        Int             @default(1)
   tipoUnidadId  Int?
   detalleventa  detalleventa[]
+  detallepedido detallepedido[]
   preciolog     preciolog[]
-  tipounidad    tipounidad?    @relation(fields: [tipoUnidadId], references: [id], map: "Producto_tipoUnidadId_fkey")
+  tipounidad    tipounidad?     @relation(fields: [tipoUnidadId], references: [id], map: "Producto_tipoUnidadId_fkey")
 
   @@index([tipoUnidadId], map: "Producto_tipoUnidadId_fkey")
 }
 
 model tipounidad {
-  id            Int        @id @default(autoincrement())
+  id            Int             @id @default(autoincrement())
   tipo          String
-  fechaCreacion DateTime   @default(now())
-  estado        Int        @default(1)
+  fechaCreacion DateTime        @default(now())
+  estado        Int             @default(1)
   producto      producto[]
+  detallepedido detallepedido[]
+}
+
+model pedido {
+  id            Int             @id @default(autoincrement())
+  nroPedido     String          @unique
+  fechaCreacion DateTime        @default(now())
+  estado        Int             @default(1)
+  detallepedido detallepedido[]
+}
+
+model detallepedido {
+  id           Int        @id @default(autoincrement())
+  cantidad     Decimal    @db.Decimal(6, 2)
+  pedidoId     Int
+  productoId   Int
+  tipoUnidadId Int
+  pedido       pedido     @relation(fields: [pedidoId], references: [id], onDelete: Cascade, map: "DetallePedido_pedidoId_fkey")
+  producto     producto   @relation(fields: [productoId], references: [id], map: "DetallePedido_productoId_fkey")
+  tipounidad   tipounidad @relation(fields: [tipoUnidadId], references: [id], map: "DetallePedido_tipoUnidadId_fkey")
+
+  @@index([pedidoId], map: "DetallePedido_pedidoId_fkey")
+  @@index([productoId], map: "DetallePedido_productoId_fkey")
+  @@index([tipoUnidadId], map: "DetallePedido_tipoUnidadId_fkey")
 }
 
 model usuario {

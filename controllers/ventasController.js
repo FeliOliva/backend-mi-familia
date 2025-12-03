@@ -201,23 +201,32 @@ const updateVenta = async (req, res) => {
     // 1) Actualizar en DB
     const updated = await ventaModel.updateVenta(id, ventaUpdates);
 
-    const { cajaAnterior, ...ventaActualizada } = updated;
+    const { cajaAnterior, negocioAnterior, ...ventaActualizada } = updated;
 
     // 2) Obtener venta completa (con detalles y negocio) para el WebSocket
     const ventaConRelaciones = await ventaModel.getVentaById(
       ventaActualizada.id
     );
 
-    // 3) WebSocket: sacar de la caja anterior y agregar a la nueva
+    // 3) WebSocket: manejar cambios de caja o negocio
+    const cambioCaja = cajaAnterior !== ventaActualizada.cajaId;
+    const cambioNegocio = negocioAnterior !== ventaActualizada.negocioId;
 
-    // Si antes tenía caja, eliminarla de esa caja
-    if (cajaAnterior) {
-      eliminarVenta(cajaAnterior, ventaActualizada.id);
-    }
+    // Si cambió la caja o el negocio, eliminar de la caja anterior y re-emitir
+    if (cambioCaja || cambioNegocio) {
+      // Eliminar de la caja anterior (si tenía)
+      if (cajaAnterior) {
+        eliminarVenta(cajaAnterior, ventaActualizada.id);
+      }
 
-    // Si ahora tiene caja, volver a emitirla como "nueva-venta"
-    if (ventaActualizada.cajaId) {
-      broadcastNuevaVenta(ventaConRelaciones);
+      // Emitir en la caja actual (si tiene)
+      if (ventaActualizada.cajaId) {
+        broadcastNuevaVenta(ventaConRelaciones);
+      }
+    } else if (ventaActualizada.cajaId) {
+      // Si no cambió caja ni negocio, pero hay otros cambios, actualizar la venta existente
+      const { actualizarVenta } = require("../websocket");
+      actualizarVenta(ventaActualizada.cajaId, ventaConRelaciones);
     }
 
     // 4) Responder al front

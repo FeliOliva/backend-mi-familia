@@ -5,75 +5,10 @@ const { prisma } = require("./db");
 const cors = require("cors");
 const { setupWebSocket } = require("./websocket");
 const http = require("http");
-const cron = require("node-cron");
-const entregaModel = require("./models/entregaModel");
-const cajaModel = require("./models/cajaModel");
-// si necesitás prisma, importalo también
+const { setupCierreCajaAutomatico } = require("./jobs/cierreCajaAutomatico");
 
-// Correr todos los días a las 23:59 hora de Argentina
-cron.schedule(
-  "59 23 * * *",
-  async () => {
-    console.log("🕒 Ejecutando cierre automático de cajas...");
-
-    try {
-      // Cerrar el día de HOY (ya que es 23:59)
-      const hoy = new Date();
-
-      // 1) Obtener los totales de entregas de hoy por caja
-      const totalesPorCaja = await entregaModel.getTotalesEntregasDelDiaPorCaja(
-        hoy
-      );
-
-      if (!totalesPorCaja.length) {
-        console.log("No hay cajas pendientes para cerrar automáticamente.");
-        return;
-      }
-
-      // 2) Crear un cierre por cada caja pendiente
-      for (const caja of totalesPorCaja) {
-        const {
-          cajaId,
-          totalEfectivo,
-          totalOtros,
-          totalEntregado,
-          totalCuentaCorriente = 0,
-          metodospago = [],
-        } = caja;
-
-        const totalPagado = totalEntregado; // efectivo + otros
-        const ingresoLimpio = totalPagado; // ajustalo si descontás algo
-
-        console.log(
-          `Creando cierre automático para caja ${cajaId}, total: ${totalEntregado}`
-        );
-
-        await cajaModel.crearCierreCaja({
-          // estos nombres tienen que coincidir con lo que tu model espera
-          cajaId,
-          totalVentas: totalEntregado + totalCuentaCorriente, // o lo que uses
-          totalPagado,
-          totalCuentaCorriente,
-          totalEfectivo,
-          ingresoLimpio,
-          estado: 0, // por ejemplo estado 0 = cierre auto pendiente de revisar
-          metodoPago: metodospago.map((m) => ({
-            nombre: m.nombre,
-            total: m.total,
-          })),
-          // usuarioId lo podés dejar null o un usuario "sistema"
-        });
-      }
-
-      console.log("✅ Cierre automático de cajas finalizado");
-    } catch (err) {
-      console.error("❌ Error en cierre automático de cajas:", err);
-    }
-  },
-  {
-    timezone: "America/Argentina/Cordoba",
-  }
-);
+// Iniciar cron de cierre automático de cajas
+setupCierreCajaAutomatico();
 
 const app = express();
 const PORT = process.env.PORT;
@@ -95,6 +30,7 @@ const chequesRoutes = require("./routes/chequeRoutes");
 const resumenCuentaRoutes = require("./routes/resumenCuenta");
 const cajaRoutes = require("./routes/cajaRoutes");
 const metodosPagoRoutes = require("./routes/metodosPagoRoutes");
+const pedidoRoutes = require("./routes/pedidoRoutes");
 
 app.use(
   cors({
@@ -158,7 +94,8 @@ app.use(
   tiposUnidadesRoutes,
   chequesRoutes,
   cajaRoutes,
-  metodosPagoRoutes
+  metodosPagoRoutes,
+  pedidoRoutes
 );
 
 server.listen(PORT, () => {

@@ -258,7 +258,7 @@ const updateVenta = async (id, data) => {
     const ventaId = parseInt(id);
 
     return await prisma.$transaction(async (tx) => {
-      // 1) Traer venta original (para tener caja anterior, totalPagado, etc.)
+      // 1) Traer venta original (para tener caja y negocio anterior, totalPagado, etc.)
       const ventaOriginal = await tx.venta.findUnique({
         where: { id: ventaId },
         select: {
@@ -277,8 +277,34 @@ const updateVenta = async (id, data) => {
       }
 
       const cajaAnterior = ventaOriginal.cajaId;
+      const negocioAnterior = ventaOriginal.negocioId;
 
-      // 2) Preparar detalles nuevos
+      // 2) Verificar si cambió el negocio y determinar el estadoPago
+      const nuevoNegocioId = data.negocioId ?? ventaOriginal.negocioId;
+      const cambioNegocio = negocioAnterior !== nuevoNegocioId;
+
+      let estadoPago = ventaOriginal.estadoPago;
+
+      // Si cambió el negocio, recalcular el estadoPago según el tipo de negocio
+      if (cambioNegocio) {
+        const nuevoNegocio = await tx.negocio.findUnique({
+          where: { id: nuevoNegocioId },
+          select: { esCuentaCorriente: true },
+        });
+
+        if (nuevoNegocio) {
+          // Si el nuevo negocio es cuenta corriente y la venta no está cobrada (2)
+          if (nuevoNegocio.esCuentaCorriente && ventaOriginal.estadoPago !== 2) {
+            estadoPago = 4; // Cuenta corriente
+          }
+          // Si el nuevo negocio NO es cuenta corriente y el estado actual es 4
+          else if (!nuevoNegocio.esCuentaCorriente && ventaOriginal.estadoPago === 4) {
+            estadoPago = 1; // Pendiente normal
+          }
+        }
+      }
+
+      // 3) Preparar detalles nuevos
       const detallesInput = Array.isArray(data.detalles) ? data.detalles : [];
 
       const detallesProcesados = detallesInput.map((detalle) => {
@@ -309,16 +335,12 @@ const updateVenta = async (id, data) => {
       const totalPagado = ventaOriginal.totalPagado || 0;
       const restoPendiente = Math.max(0, totalRecalculado - totalPagado);
 
-      // Opcional: podrías recalcular estadoPago según restoPendiente/totalPagado.
-      // Por ahora respetamos el estado actual para no romper tu lógica.
-      const estadoPago = ventaOriginal.estadoPago;
-
-      // 3) Borrar detalles viejos
+      // 4) Borrar detalles viejos
       await tx.detalleventa.deleteMany({
         where: { ventaId },
       });
 
-      // 4) Actualizar cabecera de venta
+      // 5) Actualizar cabecera de venta
       const ventaActualizada = await tx.venta.update({
         where: { id: ventaId },
         data: {
@@ -327,15 +349,15 @@ const updateVenta = async (id, data) => {
           totalPagado,
           restoPendiente,
           estadoPago,
-          negocioId: data.negocioId ?? ventaOriginal.negocioId,
+          negocioId: nuevoNegocioId,
           cajaId: data.cajaId ?? ventaOriginal.cajaId,
         },
         include: {
-          negocio: { select: { id: true, nombre: true } },
+          negocio: { select: { id: true, nombre: true, esCuentaCorriente: true } },
         },
       });
 
-      // 5) Crear nuevos detalles
+      // 6) Crear nuevos detalles
       await tx.detalleventa.createMany({
         data: detallesProcesados.map((d) => ({
           ...d,
@@ -343,11 +365,12 @@ const updateVenta = async (id, data) => {
         })),
       });
 
-      // 6) Volvemos un objeto “simple” para el controller
+      // 7) Volvemos un objeto "simple" para el controller
       return {
         ...ventaActualizada,
         detalles: detallesProcesados,
         cajaAnterior,
+        negocioAnterior,
       };
     });
   } catch (error) {
