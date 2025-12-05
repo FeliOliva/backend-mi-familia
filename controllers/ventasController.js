@@ -3,16 +3,22 @@ const { broadcastNuevaVenta, eliminarVenta } = require("../websocket");
 
 const getVentas = async (req, res) => {
   try {
-    const { page, limit } = req.query;
-    const pageNumber = parseInt(page) || 1;
-    const limitNumber = parseInt(limit) || 10;
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit || "10", 10), 1),
+      100
+    );
 
-    if (pageNumber < 1 || limitNumber < 1) {
-      return res
-        .status(400)
-        .json({ error: "Los parámetros de paginación no son válidos" });
-    }
-    const ventasData = await ventaModel.getVentas(limitNumber, pageNumber);
+    const q = (req.query.q || "").trim(); // texto de búsqueda
+    const estado = req.query.estado || "todos"; // "activos" | "inactivos" | "todos"
+
+    const ventasData = await ventaModel.getVentas({
+      limit,
+      page,
+      q,
+      estado,
+    });
+
     res.status(200).json(ventasData);
   } catch (error) {
     console.error("Error al obtener las ventas:", error);

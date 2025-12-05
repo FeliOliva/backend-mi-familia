@@ -2,29 +2,46 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { cantidadConUnidad } = require("../utils/format");
 
-async function getVentas(limitNumber, pageNumber) {
+async function getVentas({ limit, page, q, estado }) {
   try {
-    const offset = (pageNumber - 1) * limitNumber;
+    const skip = (page - 1) * limit;
 
-    const ventasRaw = await prisma.venta.findMany({
-      skip: offset,
-      take: limitNumber,
-      orderBy: { fechaCreacion: "desc" },
-      include: {
-        negocio: { select: { nombre: true } },
-        caja: { select: { nombre: true } },
-        detalleventa: {
-          include: {
-            producto: {
-              select: {
-                nombre: true,
-                tipounidad: { select: { tipo: true } },
+    const where = {
+      AND: [
+        // Búsqueda por número de venta
+        q ? { nroVenta: { contains: q } } : {},
+        // Filtro por estado (si aplica)
+        estado === "activos"
+          ? { estadoPago: { not: 0 } }
+          : estado === "inactivos"
+          ? { estadoPago: 0 }
+          : {},
+      ],
+    };
+
+    const [ventasRaw, total] = await Promise.all([
+      prisma.venta.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { fechaCreacion: "desc" },
+        include: {
+          negocio: { select: { nombre: true } },
+          caja: { select: { nombre: true } },
+          detalleventa: {
+            include: {
+              producto: {
+                select: {
+                  nombre: true,
+                  tipounidad: { select: { tipo: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+      prisma.venta.count({ where }),
+    ]);
 
     const ventas = ventasRaw.map((v) => ({
       ...v,
@@ -34,12 +51,11 @@ async function getVentas(limitNumber, pageNumber) {
       })),
     }));
 
-    const totalVentas = await prisma.venta.count();
     return {
       ventas,
-      total: totalVentas,
-      totalPages: Math.ceil(totalVentas / limitNumber),
-      currentPage: pageNumber,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
     };
   } catch (error) {
     console.error("Error al obtener las ventas:", error);
