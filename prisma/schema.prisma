@@ -109,17 +109,30 @@ model metodopago {
 }
 
 model negocio {
-  id                Int           @id @default(autoincrement())
+  id                Int            @id @default(autoincrement())
   nombre            String
   direccion         String?
-  fechaCreacion     DateTime      @default(now())
-  estado            Int           @default(1)
-  esCuentaCorriente Boolean       @default(false)
-  esEditable        Boolean       @default(false)
+  fechaCreacion     DateTime       @default(now())
+  estado            Int            @default(1)
+  esCuentaCorriente Boolean        @default(false)
+  esEditable        Boolean        @default(false)
   cheque            cheque[]
   entregas          entregas[]
   notacredito       notacredito[]
   venta             venta[]
+  saldoinicial      saldoinicial[]
+}
+
+model saldoinicial {
+  id            Int      @id @default(autoincrement())
+  monto         Int
+  descripcion   String?
+  fechaCreacion DateTime @default(now())
+  estado        Int      @default(1)
+  negocioId     Int      @unique
+  negocio       negocio  @relation(fields: [negocioId], references: [id], map: "SaldoInicial_negocioId_fkey")
+
+  @@index([negocioId], map: "SaldoInicial_negocioId_fkey")
 }
 
 model notacredito {

@@ -4,6 +4,7 @@ const getResumenCuentaByNegocio = async (req, res) => {
   try {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
+    console.log("fechas", startDate, endDate);
 
     if (!id) {
       return res.status(400).json({ error: "El id es obligatorio" });
@@ -13,15 +14,18 @@ const getResumenCuentaByNegocio = async (req, res) => {
         .status(400)
         .json({ error: "Las fechas de inicio y fin son obligatorias" });
     }
+    // Parsear fechas y asegurar que incluyan todo el día en UTC
     const filterStartDate = new Date(startDate);
+    filterStartDate.setUTCHours(0, 0, 0, 0);
+    
     const filterEndDate = new Date(endDate);
-    filterStartDate.setHours(0, 0, 0, 0);
-    filterEndDate.setHours(23, 59, 59, 999);
+    filterEndDate.setUTCHours(23, 59, 59, 999);
     const resumenData = await resumenCuentaModel.getResumenCuentaByNegocio(
       parseInt(id),
       filterStartDate,
       filterEndDate,
     );
+    console.log("📊 Resumen de cuenta para negocio", id, ":", JSON.stringify(resumenData, null, 2));
     res.json(resumenData);
   } catch (error) {
     console.error("Error al obtener el resumen de cuenta por negocio:", error);

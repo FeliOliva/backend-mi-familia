@@ -2,13 +2,13 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
-  const [ventas, entregas, notasCredito] = await Promise.all([
+  const [ventas, entregas, notasCredito, saldoInicial] = await Promise.all([
     prisma.venta.findMany({
       where: {
         negocioId,
         fechaCreacion: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
+          gte: startDate,
+          lte: endDate,
         },
       },
       select: {
@@ -38,8 +38,8 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
       where: {
         negocioId,
         fechaCreacion: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
+          gte: startDate,
+          lte: endDate,
         },
       },
       select: {
@@ -58,8 +58,8 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
       where: {
         negocioId,
         fechaCreacion: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
+          gte: startDate,
+          lte: endDate,
         },
       },
       select: {
@@ -69,9 +69,35 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
         motivo: true,
       },
     }),
+
+    // Obtener saldo inicial del negocio (si existe)
+    prisma.saldoinicial?.findUnique({
+      where: { negocioId },
+      select: {
+        id: true,
+        monto: true,
+        descripcion: true,
+        fechaCreacion: true,
+      },
+    }).catch(() => null) ?? Promise.resolve(null),
   ]);
 
   const result = [
+    // Si existe saldo inicial, agregarlo al principio
+    ...(saldoInicial
+      ? [
+          {
+            tipo: "Saldo Inicial",
+            id: saldoInicial.id,
+            numero: null,
+            fecha: saldoInicial.fechaCreacion,
+            monto: saldoInicial.monto,
+            metodo_pago: null,
+            descripcion: saldoInicial.descripcion,
+            esSaldoInicial: true,
+          },
+        ]
+      : []),
     ...ventas.map((v) => ({
       tipo: "Venta",
       id: v.id,
