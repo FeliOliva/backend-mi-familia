@@ -178,7 +178,18 @@ const deleteCheque = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-    await clearChequeCache();
+    // Verificar si el cheque tiene una entrega asociada en un cierre de caja
+    const verificacion = await chequeModel.verificarChequeEnCierreCaja(id);
+    
+    console.log("Verificación del cheque:", verificacion);
+    
+    if (verificacion.tieneEntrega && verificacion.enCierre) {
+      return res.status(400).json({
+        error: "No se puede eliminar el cheque porque la entrega asociada ya está incluida en un cierre de caja definitivo.",
+        enCierre: true,
+      });
+    }
+
     await chequeModel.updateChequeStatus(id, 0);
     res.json({ message: "Cheque eliminado correctamente" });
   } catch (error) {
@@ -193,7 +204,6 @@ const upCheque = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-    await clearChequeCache();
     await chequeModel.updateChequeStatus(id, 1);
     res.json({ message: "Cheque actualizado correctamente" });
   } catch (error) {

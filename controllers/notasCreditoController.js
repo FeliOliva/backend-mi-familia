@@ -103,7 +103,6 @@ const updateNotasCredito = async (req, res) => {
     if (!id || !motivo || !monto) {
       return res.status(400).json({ error: "Faltan datos obligatorios" });
     }
-    await clearNotasCreditoCache();
 
     const notasCreditoData = await notasCreditoModel.updateNotasCredito(
       id,
@@ -125,7 +124,6 @@ const dropNotasCredito = async (req, res) => {
         .status(400)
         .json({ error: "Falta el id de la nota de credito" });
     }
-    await clearNotasCreditoCache();
     const deletedNotaCredito = await notasCreditoModel.dropNotasCredito(id);
     res.json(deletedNotaCredito);
   } catch (error) {

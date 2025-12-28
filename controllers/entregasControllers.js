@@ -252,8 +252,6 @@ const updateEntrega = async (req, res) => {
       return res.status(400).json({ error: "Faltan campos obligatorios" });
     }
 
-    await clearEntregaCache();
-
     const updatedEntrega = await entregaModel.updateEntrega(id, monto);
     res.json(updatedEntrega);
   } catch (error) {
@@ -268,8 +266,6 @@ const dropEntrega = async (req, res) => {
     if (!id) {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
-
-    await clearEntregaCache();
 
     const deletedEntrega = await entregaModel.dropEntrega(id);
     res.json(deletedEntrega);

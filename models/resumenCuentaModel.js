@@ -132,23 +132,15 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
 };
 
 const getResumenDia = async (cajaId) => {
-  const hoy = new Date();
-  const startDate = new Date(
-    hoy.getFullYear(),
-    hoy.getMonth(),
-    hoy.getDate(),
-    0,
-    0,
-    0
-  );
-  const endDate = new Date(
-    hoy.getFullYear(),
-    hoy.getMonth(),
-    hoy.getDate(),
-    23,
-    59,
-    59
-  );
+  // Obtener inicio y fin del día en la zona horaria local
+  // Prisma compara correctamente estas fechas con las UTC guardadas en la BD
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = ahora.getMonth();
+  const dia = ahora.getDate();
+  
+  const startDate = new Date(año, mes, dia, 0, 0, 0, 0);
+  const endDate = new Date(año, mes, dia, 23, 59, 59, 999);
 
   const [ventas, entregas, notasCredito] = await Promise.all([
     prisma.venta.findMany({

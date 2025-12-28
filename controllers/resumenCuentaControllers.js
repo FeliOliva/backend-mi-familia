@@ -14,12 +14,32 @@ const getResumenCuentaByNegocio = async (req, res) => {
         .status(400)
         .json({ error: "Las fechas de inicio y fin son obligatorias" });
     }
-    // Parsear fechas y asegurar que incluyan todo el día en UTC
-    const filterStartDate = new Date(startDate);
-    filterStartDate.setUTCHours(0, 0, 0, 0);
+    // Parsear fechas y asegurar que incluyan todo el día en la zona horaria local
+    // Parsear el string "YYYY-MM-DD" correctamente para evitar interpretación UTC
+    const [añoInicioStr, mesInicioStr, diaInicioStr] = startDate.split('-');
+    const añoInicio = parseInt(añoInicioStr, 10);
+    const mesInicio = parseInt(mesInicioStr, 10) - 1; // Los meses en JS son 0-indexed
+    const diaInicio = parseInt(diaInicioStr, 10);
+    const filterStartDate = new Date(añoInicio, mesInicio, diaInicio, 0, 0, 0, 0);
     
-    const filterEndDate = new Date(endDate);
-    filterEndDate.setUTCHours(23, 59, 59, 999);
+    const [añoFinStr, mesFinStr, diaFinStr] = endDate.split('-');
+    const añoFin = parseInt(añoFinStr, 10);
+    const mesFin = parseInt(mesFinStr, 10) - 1; // Los meses en JS son 0-indexed
+    const diaFin = parseInt(diaFinStr, 10);
+    
+    // Crear fecha de fin del día en hora local (23:59:59.999)
+    const fechaFinLocal = new Date(añoFin, mesFin, diaFin, 23, 59, 59, 999);
+    
+    // Extender el rango hasta el final del día siguiente en hora local
+    // Esto asegura que incluya todos los registros del día solicitado en UTC
+    // Ejemplo: Si pedimos hasta el 28 y estamos en UTC-3:
+    // - Fin del día 28 local = 02:59:59 del 29 UTC
+    // - Pero un registro a las 00:59:54 del 28 local = 03:59:54 del 28 UTC
+    // - Necesitamos incluir hasta el final del día siguiente (29) para capturar todos los registros del 28
+    const fechaFinSiguienteDia = new Date(añoFin, mesFin, diaFin + 1, 23, 59, 59, 999);
+    const filterEndDate = fechaFinSiguienteDia;
+    
+    console.log("Fechas procesadas - Inicio:", filterStartDate.toISOString(), "Fin:", filterEndDate.toISOString());
     const resumenData = await resumenCuentaModel.getResumenCuentaByNegocio(
       parseInt(id),
       filterStartDate,

@@ -1,6 +1,39 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+// Función auxiliar para obtener inicio del día en UTC
+// Cuando Prisma guarda new Date(), lo convierte a UTC automáticamente
+// Necesitamos crear fechas que representen el inicio/fin del día en la zona horaria local
+// pero que al ser comparadas con fechas UTC guardadas en la BD, coincidan correctamente
+const getInicioDelDiaUTC = () => {
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = ahora.getMonth();
+  const dia = ahora.getDate();
+  
+  // Crear fecha que representa 00:00:00 del día actual en la zona horaria local
+  // new Date() con estos parámetros crea una fecha en la zona horaria local
+  // pero internamente almacena el timestamp UTC correcto
+  const fechaLocal = new Date(año, mes, dia, 0, 0, 0, 0);
+  
+  // El timestamp ya es UTC correcto, solo necesitamos retornarlo
+  // Pero para asegurar que la comparación funcione, usamos directamente la fecha
+  return fechaLocal;
+};
+
+// Función auxiliar para obtener fin del día en UTC
+const getFinDelDiaUTC = () => {
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = ahora.getMonth();
+  const dia = ahora.getDate();
+  
+  // Crear fecha que representa 23:59:59.999 del día actual en la zona horaria local
+  const fechaLocal = new Date(año, mes, dia, 23, 59, 59, 999);
+  
+  return fechaLocal;
+};
+
 const getAllEntregas = async (limit, page) => {
   try {
     limit = parseInt(limit) || 10;
@@ -106,21 +139,35 @@ const getEntregasByNegocio = async (
     const offset = (page - 1) * limit;
 
     // Convertir fechas a UTC correctamente
-    const filterStartDate = startDate ? new Date(startDate) : null;
-    const filterEndDate = endDate ? new Date(endDate) : null;
+    let filterStartDate = null;
+    let filterEndDate = null;
 
-    if (filterEndDate) {
-      filterEndDate.setUTCHours(23, 59, 59, 999); // Asegurar que se incluye todo el día en UTC
+    if (startDate) {
+      // Crear fecha de inicio del día desde la fecha proporcionada
+      const fechaLocal = new Date(startDate);
+      const año = fechaLocal.getFullYear();
+      const mes = fechaLocal.getMonth();
+      const dia = fechaLocal.getDate();
+      filterStartDate = new Date(año, mes, dia, 0, 0, 0, 0);
+    }
+
+    if (endDate) {
+      // Crear fecha de fin del día desde la fecha proporcionada
+      const fechaLocal = new Date(endDate);
+      const año = fechaLocal.getFullYear();
+      const mes = fechaLocal.getMonth();
+      const dia = fechaLocal.getDate();
+      filterEndDate = new Date(año, mes, dia, 23, 59, 59, 999);
     }
 
     const whereClause = {
       negocioId: parseInt(negocioId),
       estado: 1,
       ...(filterStartDate && {
-        fechaCreacion: { gte: filterStartDate.toISOString() },
+        fechaCreacion: { gte: filterStartDate },
       }),
       ...(filterEndDate && {
-        fechaCreacion: { lte: filterEndDate.toISOString() },
+        fechaCreacion: { lte: filterEndDate },
       }),
       ...(cajaId && { cajaId: parseInt(cajaId) }),
     };
@@ -277,21 +324,8 @@ const dropEntrega = async (id) => {
 
 const getUltimaEntregaDelDia = async () => {
   try {
-    const hoy = new Date();
-    const inicioDelDia = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth(),
-      hoy.getDate()
-    );
-    const finDelDia = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth(),
-      hoy.getDate(),
-      23,
-      59,
-      59,
-      999
-    );
+    const inicioDelDia = getInicioDelDiaUTC();
+    const finDelDia = getFinDelDiaUTC();
 
     const ultimaEntrega = await prisma.entregas.findFirst({
       where: {
@@ -313,21 +347,8 @@ const getUltimaEntregaDelDia = async () => {
 };
 
 const getTotalesEntregasDelDiaPorCaja = async () => {
-  const hoy = new Date();
-  const inicioDelDia = new Date(
-    hoy.getFullYear(),
-    hoy.getMonth(),
-    hoy.getDate()
-  );
-  const finDelDia = new Date(
-    hoy.getFullYear(),
-    hoy.getMonth(),
-    hoy.getDate(),
-    23,
-    59,
-    59,
-    999
-  );
+  const inicioDelDia = getInicioDelDiaUTC();
+  const finDelDia = getFinDelDiaUTC();
 
   // 1) Último cierre DEFINITIVO (estado = 1) por caja en el día
   const cierresPorCaja = await prisma.cierrecaja.groupBy({
