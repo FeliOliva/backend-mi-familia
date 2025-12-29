@@ -56,11 +56,6 @@ const addProduct = async (req, res) => {
     const { nombre, precio, precioInicial, tipoUnidadId, rol_usuario } =
       req.body;
     console.log("data desde el back", req.body);
-    if (rol_usuario !== 0) {
-      return res
-        .status(401)
-        .json({ error: "No tiene permiso para realizar esta accion" });
-    }
     if (!nombre || !precio || !precioInicial || !tipoUnidadId) {
       return res
         .status(400)

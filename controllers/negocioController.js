@@ -78,13 +78,7 @@ const updateNegocio = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-    const { nombre, direccion, esCuentaCorriente, esEditable, rol_usuario } =
-      req.body;
-    if (rol_usuario !== 0) {
-      return res
-        .status(403)
-        .json({ error: "No tienes permiso para realizar esta acción" });
-    }
+    const { nombre, direccion, esCuentaCorriente, esEditable } = req.body;
 
     if (!nombre || !direccion) {
       return res
@@ -99,8 +93,8 @@ const updateNegocio = async (req, res) => {
     await negocioModel.updateNegocio(id, {
       nombre: nombre.toUpperCase(),
       direccion: direccion.toUpperCase(),
-      esCuentaCorriente,
-      esEditable,
+      esCuentaCorriente: !!esCuentaCorriente,
+      esEditable: !!esEditable,
     });
     res.status(200).json({ message: "Negocio actualizado correctamente" });
   } catch (error) {

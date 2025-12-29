@@ -127,11 +127,6 @@ const addVenta = async (req, res) => {
     const { nroVenta, negocioId, cajaId, rol_usuario, detalles, usuarioId } =
       req.body;
     console.log("body en addventa: ", req.body);
-    if (rol_usuario !== 0 && rol_usuario !== 1) {
-      return res
-        .status(401)
-        .json({ error: "No tienes permiso para realizar esta acción" });
-    }
 
     if (!nroVenta || !negocioId || !detalles || detalles.length === 0) {
       return res.status(400).json({ error: "Faltan campos obligatorios" });
