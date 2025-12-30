@@ -26,7 +26,7 @@ async function getVentas({ limit, page, q, estado }) {
         take: limit,
         orderBy: { fechaCreacion: "desc" },
         include: {
-          negocio: { select: { nombre: true } },
+          negocio: { select: { nombre: true, direccion: true } },
           caja: { select: { nombre: true } },
           detalleventa: {
             include: {
@@ -155,7 +155,7 @@ const getVentaById = async (id) => {
       where: { id: parseInt(id) },
       include: {
         negocio: {
-          select: { nombre: true },
+          select: { nombre: true, direccion: true },
         },
         detalleventa: {
           include: {
@@ -212,7 +212,7 @@ const getVentasByNegocio = async (
       skip: offset,
       take: limit,
       include: {
-        negocio: { select: { nombre: true } },
+        negocio: { select: { nombre: true, direccion: true } },
         caja: { select: { nombre: true } },
         detalles: { include: { producto: true } },
       },

@@ -49,7 +49,7 @@ const getAllEntregas = async (limit, page) => {
             nombre: true,
           },
         },
-        metodoPago: {
+        metodopago: {
           select: {
             nombre: true,
           },
@@ -92,7 +92,7 @@ const getEntregaById = async (id) => {
             nombre: true,
           },
         },
-        metodoPago: {
+        metodopago: {
           select: {
             nombre: true,
           },
@@ -275,6 +275,61 @@ const actualizarVentaPorEntrega = async (ventaId, montoEntrega) => {
   };
 };
 
+// Función para recalcular la venta cuando se modifica una entrega
+const recalcularVentaPorModificacionEntrega = async (ventaId, montoAnterior, montoNuevo) => {
+  try {
+    const venta = await prisma.venta.findUnique({
+      where: { id: Number(ventaId) },
+    });
+
+    if (!venta) {
+      throw new Error("Venta no encontrada");
+    }
+
+    // Obtener todas las entregas de esta venta para recalcular el totalPagado
+    const todasLasEntregas = await prisma.entregas.findMany({
+      where: { ventaId: Number(ventaId) },
+      select: { monto: true },
+    });
+
+    // Calcular el total pagado sumando todas las entregas
+    const totalPagadoNuevo = todasLasEntregas.reduce((sum, e) => sum + Number(e.monto || 0), 0);
+
+    const total = Number(venta.total || 0);
+    const restoPendiente = Math.max(0, total - totalPagadoNuevo);
+
+    let nuevoEstado;
+
+    if (restoPendiente <= 0) {
+      // Se pagó todo
+      nuevoEstado = 2; // COBRADA
+    } else if (totalPagadoNuevo > 0) {
+      // Se pagó algo, pero queda pendiente
+      nuevoEstado = 5; // PAGO PARCIAL
+    } else {
+      // No se ha pagado nada
+      nuevoEstado = 1; // PENDIENTE
+    }
+
+    const ventaActualizada = await prisma.venta.update({
+      where: { id: Number(ventaId) },
+      data: {
+        totalPagado: totalPagadoNuevo,
+        estadoPago: nuevoEstado,
+        restoPendiente,
+      },
+    });
+
+    return {
+      venta: ventaActualizada,
+      estadoSocket: "venta-actualizada",
+    };
+  } catch (error) {
+    console.error("Error recalculando venta por modificación de entrega:", error);
+    throw new Error("Error al recalcular la venta");
+  }
+};
+
 const marcarVentaParaPagoOtroDia = async (ventaId) => {
   try {
     return await prisma.venta.update({
@@ -299,15 +354,78 @@ const getEntregasPorVenta = async (ventaId) => {
   });
 };
 
-const updateEntrega = async (id, monto) => {
+const updateEntrega = async (id, monto, metodoPagoId) => {
   try {
+    const data = { monto: parseInt(monto) };
+    if (metodoPagoId !== undefined && metodoPagoId !== null) {
+      data.metodoPagoId = parseInt(metodoPagoId);
+    }
+    
     return await prisma.entregas.update({
       where: { id: parseInt(id) },
-      data: { monto },
+      data,
+      include: {
+        negocio: {
+          select: { nombre: true },
+        },
+        metodopago: {
+          select: { nombre: true },
+        },
+      },
     });
   } catch (error) {
     console.error("Error actualizando entrega:", error);
     throw new Error("Error al actualizar la entrega");
+  }
+};
+
+// Función para verificar si una entrega está en un cierre de caja cerrado
+const estaEnCierreCerrado = async (entregaId) => {
+  try {
+    const entrega = await prisma.entregas.findUnique({
+      where: { id: parseInt(entregaId) },
+      select: { fechaCreacion: true, cajaId: true },
+    });
+
+    if (!entrega || !entrega.cajaId) {
+      // Si no tiene cajaId, no puede estar en un cierre
+      return false;
+    }
+
+    // Obtener inicio y fin del día de la entrega
+    const fechaEntrega = new Date(entrega.fechaCreacion);
+    const año = fechaEntrega.getFullYear();
+    const mes = fechaEntrega.getMonth();
+    const dia = fechaEntrega.getDate();
+    const inicioDiaEntrega = new Date(año, mes, dia, 0, 0, 0, 0);
+    const finDiaEntrega = new Date(año, mes, dia, 23, 59, 59, 999);
+
+    // Buscar el último cierre cerrado (estado = 1) de esa caja hasta el día de la entrega
+    const ultimoCierre = await prisma.cierrecaja.findFirst({
+      where: {
+        cajaId: entrega.cajaId,
+        estado: 1, // Cierre cerrado/definitivo
+        fecha: {
+          lte: finDiaEntrega, // Cierre hasta el fin del día de la entrega
+        },
+      },
+      orderBy: {
+        fecha: 'desc',
+      },
+    });
+
+    if (!ultimoCierre) {
+      // No hay cierre cerrado, se puede modificar
+      return false;
+    }
+
+    // Si hay un cierre cerrado y la entrega es anterior o igual a ese cierre, está incluida
+    // Los cierres incluyen todas las entregas hasta su fecha
+    return fechaEntrega <= ultimoCierre.fecha;
+  } catch (error) {
+    console.error("Error verificando cierre cerrado:", error);
+    // En caso de error, ser más restrictivo y no permitir la modificación
+    return true;
   }
 };
 
@@ -498,4 +616,6 @@ module.exports = {
   marcarVentaParaPagoOtroDia,
   getTotalesEntregasDelDiaPorCaja,
   getEntregasPorVenta,
+  estaEnCierreCerrado,
+  recalcularVentaPorModificacionEntrega,
 };

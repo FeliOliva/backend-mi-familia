@@ -246,17 +246,70 @@ const addEntrega = async (req, res) => {
 
 const updateEntrega = async (req, res) => {
   try {
-    const { monto } = req.body;
+    const { monto, metodoPagoId } = req.body;
     const { id } = req.params;
-    if (!id || !monto) {
-      return res.status(400).json({ error: "Faltan campos obligatorios" });
+    
+    if (!id || monto === undefined) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Faltan campos obligatorios (id y monto son requeridos)" 
+      });
     }
 
-    const updatedEntrega = await entregaModel.updateEntrega(id, monto);
-    res.json(updatedEntrega);
+    // Obtener la entrega actual para validaciones
+    const entregaActual = await entregaModel.getEntregaById(id);
+    if (!entregaActual) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Entrega no encontrada" 
+      });
+    }
+
+    // Validar que no esté en un cierre de caja cerrado
+    const enCierreCerrado = await entregaModel.estaEnCierreCerrado(id);
+    if (enCierreCerrado) {
+      return res.status(400).json({ 
+        success: false,
+        error: "No se puede modificar una entrega que ya está incluida en un cierre de caja cerrado" 
+      });
+    }
+
+    const montoAnterior = entregaActual.monto;
+    const montoNuevo = parseInt(monto);
+
+    // Actualizar la entrega
+    const updatedEntrega = await entregaModel.updateEntrega(id, montoNuevo, metodoPagoId);
+
+    // Si la entrega está asociada a una venta, recalcular los totales
+    let ventaActualizada = null;
+    if (entregaActual.ventaId) {
+      const resultado = await entregaModel.recalcularVentaPorModificacionEntrega(
+        entregaActual.ventaId,
+        montoAnterior,
+        montoNuevo
+      );
+      ventaActualizada = resultado.venta;
+      
+      // Emitir actualización por websocket si hay cajaId
+      if (entregaActual.cajaId) {
+        actualizarVenta(entregaActual.cajaId, ventaActualizada, resultado.estadoSocket);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Entrega actualizada correctamente",
+      data: {
+        entrega: updatedEntrega,
+        venta: ventaActualizada,
+      },
+    });
   } catch (error) {
     console.error("Error al actualizar la entrega:", error);
-    res.status(500).json({ error: "Error al actualizar la entrega" });
+    res.status(500).json({ 
+      success: false,
+      error: error.message || "Error al actualizar la entrega" 
+    });
   }
 };
 
