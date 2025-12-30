@@ -1,6 +1,32 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+// Función auxiliar para obtener inicio del día (misma lógica que entregaModel)
+const getInicioDelDiaUTC = () => {
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = ahora.getMonth();
+  const dia = ahora.getDate();
+  
+  // Crear fecha que representa 00:00:00 del día actual en la zona horaria local
+  const fechaLocal = new Date(año, mes, dia, 0, 0, 0, 0);
+  
+  return fechaLocal;
+};
+
+// Función auxiliar para obtener fin del día (misma lógica que entregaModel)
+const getFinDelDiaUTC = () => {
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = ahora.getMonth();
+  const dia = ahora.getDate();
+  
+  // Crear fecha que representa 23:59:59.999 del día actual en la zona horaria local
+  const fechaLocal = new Date(año, mes, dia, 23, 59, 59, 999);
+  
+  return fechaLocal;
+};
+
 const getCajas = async () => {
   try {
     // Incluye las ventas asociadas a cada caja y suma el total
@@ -207,10 +233,10 @@ const getDetalleVentasPorCierre = async (cierreId) => {
         monto: true,
         ventaId: true,
         metodopago: { select: { nombre: true } },
+        negocio: { select: { nombre: true } }, // Obtener negocio directamente de la entrega
         venta: {
           select: {
             nroVenta: true,
-            negocio: { select: { nombre: true } },
           },
         },
       },
@@ -222,13 +248,54 @@ const getDetalleVentasPorCierre = async (cierreId) => {
       entregaId: e.id,
       ventaId: e.ventaId,
       nroVenta: e.venta?.nroVenta || null,
-      negocioNombre: e.venta?.negocio?.nombre || null,
+      negocioNombre: e.negocio?.nombre || "SIN NEGOCIO", // Usar el negocio de la entrega directamente
       metodoPago: e.metodopago?.nombre || "SIN MÉTODO",
       monto: Number(e.monto || 0),
     }));
   } catch (error) {
     console.error("Error al obtener detalle de ventas del cierre:", error);
     throw new Error("Error al obtener detalle de ventas del cierre");
+  }
+};
+
+/**
+ * Verifica si ya existe un cierre de caja (de cualquier estado) para una caja en el día actual
+ * Usa la misma lógica de fechas que getTotalesEntregasDelDiaPorCaja para mantener consistencia
+ * @param {number} cajaId - ID de la caja
+ * @returns {Promise<boolean>} - true si existe un cierre, false si no
+ */
+const existeCierreCajaParaFecha = async (cajaId) => {
+  try {
+    // Usar las mismas funciones auxiliares que getTotalesEntregasDelDiaPorCaja
+    const inicioDelDia = getInicioDelDiaUTC();
+    const finDelDia = getFinDelDiaUTC();
+
+    // Buscar cualquier cierre de caja (de cualquier estado) para esta caja en el día actual
+    const cierreExistente = await prisma.cierrecaja.findFirst({
+      where: {
+        cajaId: parseInt(cajaId),
+        fecha: {
+          gte: inicioDelDia,
+          lte: finDelDia,
+        },
+        // No filtrar por estado, verificar todos los cierres (0=automático, 1=cerrado, etc.)
+      },
+      select: {
+        id: true,
+        estado: true,
+        fecha: true,
+      },
+    });
+
+    if (cierreExistente) {
+      console.log(`   ℹ️  Cierre existente encontrado: ID ${cierreExistente.id}, estado ${cierreExistente.estado}, fecha ${cierreExistente.fecha.toISOString()}`);
+    }
+
+    return !!cierreExistente;
+  } catch (error) {
+    console.error("Error verificando si existe cierre de caja:", error);
+    // En caso de error, ser más restrictivo y asumir que existe para evitar duplicados
+    return true;
   }
 };
 
@@ -242,4 +309,5 @@ module.exports = {
   getDetalleMetodosPorCierre,
   editarCierreCaja,
   getDetalleVentasPorCierre,
+  existeCierreCajaParaFecha,
 };

@@ -105,6 +105,16 @@ const ejecutarCierreAutomatico = async () => {
     // Procesar cada caja
     for (const caja of totalesPorCaja) {
       console.log(`   🔄 Procesando caja ${caja.cajaId}...`);
+      
+      // Verificar si ya existe un cierre de caja para esta caja en el día actual
+      const yaExisteCierre = await cajaModel.existeCierreCajaParaFecha(caja.cajaId);
+      
+      if (yaExisteCierre) {
+        console.log(`   ⚠️  Caja ${caja.cajaId} ya tiene un cierre de caja para hoy. Omitiendo...`);
+        console.log("-".repeat(60));
+        continue;
+      }
+
       console.log(`      - Total entregado: $${caja.totalEntregado}`);
       console.log(`      - Efectivo: $${caja.totalEfectivo}`);
       console.log(`      - Otros: $${caja.totalOtros}`);
