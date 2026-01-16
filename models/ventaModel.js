@@ -242,6 +242,7 @@ const addVenta = async (data) => {
           totalPagado: data.totalPagado,
           restoPendiente: data.restoPendiente,
           estadoPago: data.estadoPago,
+          observacion: data.observacion || null,
           negocioId: data.negocioId,
           cajaId: data.cajaId || null,
           usuarioId: data.usuarioId,
@@ -285,6 +286,7 @@ const updateVenta = async (id, data) => {
           estadoPago: true,
           negocioId: true,
           cajaId: true,
+          observacion: true,
         },
       });
 
@@ -365,6 +367,7 @@ const updateVenta = async (id, data) => {
           totalPagado,
           restoPendiente,
           estadoPago,
+          observacion: data.observacion ?? ventaOriginal.observacion,
           negocioId: nuevoNegocioId,
           cajaId: data.cajaId ?? ventaOriginal.cajaId,
         },

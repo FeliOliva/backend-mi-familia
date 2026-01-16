@@ -14,6 +14,7 @@ model caja {
   estado        Int           @default(1)
   cierrecaja    cierrecaja[]
   entregas      entregas[]
+  gastos        gasto[]
   notacredito   notacredito[]
   usuario       usuario[]
   venta         venta[]
@@ -44,6 +45,8 @@ model cierrecaja {
   totalPagado          Int                    @default(0)
   totalCuentaCorriente Int                    @default(0)
   totalEfectivo        Int                    @default(0)
+  totalEfectivoBruto   Int                    @default(0)
+  totalGastos          Int                    @default(0)
   ingresoLimpio        Int                    @default(0)
   estado               Int                    @default(0)
   caja                 caja?                  @relation(fields: [cajaId], references: [id], map: "CierreCaja_cajaId_fkey")
@@ -220,6 +223,7 @@ model usuario {
   cajaId        Int?
   cierrecaja    cierrecaja[]
   caja          caja?        @relation(fields: [cajaId], references: [id], map: "Usuario_cajaId_fkey")
+  gastos        gasto[]
   venta         venta[]
 
   @@index([cajaId], map: "Usuario_cajaId_fkey")
@@ -233,6 +237,7 @@ model venta {
   restoPendiente Int            @default(0)
   estadoPago     Int            @default(1)
   fechaCreacion  DateTime       @default(now())
+  observacion    String?
   negocioId      Int
   cajaId         Int?
   usuarioId      Int?
@@ -245,4 +250,19 @@ model venta {
   @@index([cajaId], map: "Venta_cajaId_fkey")
   @@index([negocioId], map: "Venta_negocioId_fkey")
   @@index([usuarioId], map: "Venta_usuarioId_fkey")
+}
+
+model gasto {
+  id            Int      @id @default(autoincrement())
+  monto         Int
+  motivo        String
+  fechaCreacion DateTime @default(now())
+  estado        Int      @default(1)
+  usuarioId     Int
+  usuario       usuario @relation(fields: [usuarioId], references: [id], map: "Gasto_usuarioId_fkey")
+  cajaId        Int
+  caja          caja     @relation(fields: [cajaId], references: [id], map: "Gasto_cajaId_fkey")
+
+  @@index([usuarioId], map: "Gasto_usuarioId_fkey")
+  @@index([cajaId], map: "Gasto_cajaId_fkey")
 }

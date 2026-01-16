@@ -67,6 +67,8 @@ const crearCierreCaja = async (data) => {
         totalPagado: data.totalPagado,
         totalCuentaCorriente: data.totalCuentaCorriente || 0,
         totalEfectivo: data.totalEfectivo || 0,
+        totalEfectivoBruto: data.totalEfectivoBruto || data.totalEfectivo || 0,
+        totalGastos: data.totalGastos || 0,
         ingresoLimpio: data.ingresoLimpio || 0,
         estado: data.estado || 0,
         cierrecajametodopago:

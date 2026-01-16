@@ -124,8 +124,15 @@ const getVentasByNegocio = async (req, res) => {
 
 const addVenta = async (req, res) => {
   try {
-    const { nroVenta, negocioId, cajaId, rol_usuario, detalles, usuarioId } =
-      req.body;
+    const {
+      nroVenta,
+      negocioId,
+      cajaId,
+      rol_usuario,
+      detalles,
+      usuarioId,
+      observacion,
+    } = req.body;
     console.log("body en addventa: ", req.body);
 
     if (!nroVenta || !negocioId || !detalles || detalles.length === 0) {
@@ -161,6 +168,7 @@ const addVenta = async (req, res) => {
       cajaId,
       estadoPago,
       usuarioId,
+      observacion: observacion ? String(observacion).toUpperCase() : null,
       detalles: detallesProcesados,
     });
 

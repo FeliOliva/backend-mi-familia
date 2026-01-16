@@ -1,0 +1,1 @@
+DELETE FROM gasto WHERE usuarioId IS NULL;

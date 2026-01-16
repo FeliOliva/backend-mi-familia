@@ -52,6 +52,8 @@ const procesarCierreCaja = async (caja, intento = 1) => {
       totalPagado,
       totalCuentaCorriente,
       totalEfectivo,
+      totalEfectivoBruto: totalEfectivo,
+      totalGastos: 0,
       ingresoLimpio,
       estado: 0, // 0 = cierre automático pendiente de revisar
       metodoPago: metodosPagoAgrupados,
