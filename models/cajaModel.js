@@ -235,7 +235,7 @@ const getDetalleVentasPorCierre = async (cierreId) => {
         monto: true,
         ventaId: true,
         metodopago: { select: { nombre: true } },
-        negocio: { select: { nombre: true } }, // Obtener negocio directamente de la entrega
+        negocio: { select: { nombre: true, esCuentaCorriente: true } }, // Obtener negocio directamente de la entrega
         venta: {
           select: {
             nroVenta: true,
@@ -253,6 +253,9 @@ const getDetalleVentasPorCierre = async (cierreId) => {
       negocioNombre: e.negocio?.nombre || "SIN NEGOCIO", // Usar el negocio de la entrega directamente
       metodoPago: e.metodopago?.nombre || "SIN MÉTODO",
       monto: Number(e.monto || 0),
+      origenCobro: e.negocio?.esCuentaCorriente
+        ? "PAGO_CUENTA_CORRIENTE"
+        : "VENTA_DEL_DIA",
     }));
   } catch (error) {
     console.error("Error al obtener detalle de ventas del cierre:", error);
