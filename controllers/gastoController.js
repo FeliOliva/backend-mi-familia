@@ -16,7 +16,12 @@ const getGastos = async (req, res) => {
         .status(400)
         .json({ error: "Parámetros de paginación no válidos" });
     }
-    const gastosData = await gastoModel.getGastos(limitNumber, pageNumber);
+    const usuarioId = req.user?.id;
+    const gastosData = await gastoModel.getGastos(
+      limitNumber,
+      pageNumber,
+      usuarioId
+    );
     res.json(gastosData);
   } catch (error) {
     console.error("Error al obtener los gastos:", error);
@@ -31,6 +36,10 @@ const getGastoById = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
     const gastoData = await gastoModel.getGastoById(id);
+    const usuarioId = req.user?.id;
+    if (gastoData && usuarioId && gastoData.usuarioId !== usuarioId) {
+      return res.status(403).json({ error: "No autorizado" });
+    }
     res.json(gastoData);
   } catch (error) {
     console.error("Error al obtener el gasto:", error);
@@ -52,7 +61,8 @@ const getTotalesGastosDelDiaPorCaja = async (req, res) => {
 
 const getGastosDelDia = async (req, res) => {
   try {
-    const { usuarioId, cajaId } = req.query;
+    const { cajaId } = req.query;
+    const usuarioId = req.user?.id;
     const gastos = await gastoModel.getGastosDelDia({ usuarioId, cajaId });
     res.json(gastos);
   } catch (error) {
@@ -63,7 +73,8 @@ const getGastosDelDia = async (req, res) => {
 
 const addGasto = async (req, res) => {
   try {
-    const { motivo, monto, usuarioId, cajaId } = req.body;
+    const { motivo, monto, cajaId } = req.body;
+    const usuarioId = req.user?.id;
     if (!motivo || !monto || !usuarioId || !cajaId) {
       return res.status(400).json({ error: "Faltan datos obligatorios" });
     }

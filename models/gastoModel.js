@@ -19,14 +19,18 @@ const getFinDelDiaUTC = () => {
   return new Date(año, mes, dia, 23, 59, 59, 999);
 };
 
-const getGastos = async (limit, page) => {
+const getGastos = async (limit, page, usuarioId) => {
   try {
     limit = parseInt(limit) || 10;
     page = parseInt(page) || 1;
 
     const offset = (page - 1) * limit;
+    const where = { estado: 1 };
+    if (usuarioId) {
+      where.usuarioId = parseInt(usuarioId);
+    }
     const gastos = await prisma.gasto.findMany({
-      where: { estado: 1 },
+      where,
       skip: offset,
       take: limit,
       orderBy: { fechaCreacion: "desc" },
@@ -39,9 +43,7 @@ const getGastos = async (limit, page) => {
         },
       },
     });
-    const totalGastos = await prisma.gasto.count({
-      where: { estado: 1 },
-    });
+    const totalGastos = await prisma.gasto.count({ where });
 
     return {
       gastos,
