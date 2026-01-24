@@ -2,9 +2,13 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { cantidadConUnidad } = require("../utils/format");
 
-async function getVentas({ limit, page, q, estado }) {
+async function getVentas({ limit, page, q, estado, startDate, endDate }) {
   try {
     const skip = (page - 1) * limit;
+
+    const fechaCreacion = {};
+    if (startDate) fechaCreacion.gte = startDate;
+    if (endDate) fechaCreacion.lte = endDate;
 
     const where = {
       AND: [
@@ -16,6 +20,7 @@ async function getVentas({ limit, page, q, estado }) {
           : estado === "inactivos"
           ? { estadoPago: 0 }
           : {},
+        Object.keys(fechaCreacion).length ? { fechaCreacion } : {},
       ],
     };
 

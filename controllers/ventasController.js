@@ -11,12 +11,36 @@ const getVentas = async (req, res) => {
 
     const q = (req.query.q || "").trim(); // texto de búsqueda
     const estado = req.query.estado || "todos"; // "activos" | "inactivos" | "todos"
+    const { startDate, endDate } = req.query;
+
+    let filterStartDate = null;
+    let filterEndDate = null;
+    if (startDate) {
+      const [y, m, d] = startDate.split("-");
+      const year = parseInt(y, 10);
+      const month = parseInt(m, 10) - 1;
+      const day = parseInt(d, 10);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        filterStartDate = new Date(year, month, day, 0, 0, 0, 0);
+      }
+    }
+    if (endDate) {
+      const [y, m, d] = endDate.split("-");
+      const year = parseInt(y, 10);
+      const month = parseInt(m, 10) - 1;
+      const day = parseInt(d, 10);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        filterEndDate = new Date(year, month, day, 23, 59, 59, 999);
+      }
+    }
 
     const ventasData = await ventaModel.getVentas({
       limit,
       page,
       q,
       estado,
+      startDate: filterStartDate,
+      endDate: filterEndDate,
     });
 
     res.status(200).json(ventasData);

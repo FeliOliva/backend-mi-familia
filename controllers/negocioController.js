@@ -31,6 +31,19 @@ const getAllNegocios = async (req, res) => {
     res.status(500).json({ error: "Error al obtener los negocios" });
   }
 };
+const getNegociosPorCaja = async (req, res) => {
+  try {
+    const { cajaId } = req.params;
+    if (!cajaId) {
+      return res.status(400).json({ error: "El cajaId es obligatorio" });
+    }
+    const negociosData = await negocioModel.getNegociosConVentasPorCaja(cajaId);
+    res.status(200).json(negociosData);
+  } catch (error) {
+    console.error("Error al obtener los negocios por caja:", error);
+    res.status(500).json({ error: "Error al obtener los negocios por caja" });
+  }
+};
 const getNegocioById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -160,4 +173,5 @@ module.exports = {
   getAllNegocios,
   deshabilitarNegocio,
   habilitarNegocio,
+  getNegociosPorCaja,
 };

@@ -9,6 +9,10 @@ const getResumenCuentaByNegocio = async (req, res) => {
     if (!id) {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
+    const negocioId = parseInt(id, 10);
+    if (Number.isNaN(negocioId)) {
+      return res.status(400).json({ error: "El id es inválido" });
+    }
     if (!startDate || !endDate) {
       return res
         .status(400)
@@ -41,7 +45,7 @@ const getResumenCuentaByNegocio = async (req, res) => {
     
     console.log("Fechas procesadas - Inicio:", filterStartDate.toISOString(), "Fin:", filterEndDate.toISOString());
     const resumenData = await resumenCuentaModel.getResumenCuentaByNegocio(
-      parseInt(id),
+      negocioId,
       filterStartDate,
       filterEndDate,
     );

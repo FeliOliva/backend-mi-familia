@@ -33,6 +33,37 @@ const getAllNegocios = async () => {
     throw new Error("Error al obtener los negocios");
   }
 };
+const getNegociosConVentasPorCaja = async (cajaId) => {
+  try {
+    const cajaIdNum = parseInt(cajaId);
+    if (Number.isNaN(cajaIdNum)) {
+      throw new Error("cajaId inválido");
+    }
+
+    const whereClause = {
+      venta: {
+        some: {
+          cajaId: cajaIdNum,
+          // Solo ventas con deuda/pedientes (no cobradas)
+          estadoPago: { in: [1, 3, 4, 5] },
+        },
+      },
+    };
+
+    const [negocios, totalNegocios] = await Promise.all([
+      prisma.negocio.findMany({ where: whereClause }),
+      prisma.negocio.count({ where: whereClause }),
+    ]);
+
+    return {
+      negocios,
+      total: totalNegocios,
+    };
+  } catch (error) {
+    console.error("Error consultando negocios por caja:", error);
+    throw new Error("Error al obtener los negocios por caja");
+  }
+};
 const getNegocioById = async (id) => {
   try {
     return await prisma.negocio.findUnique({ where: { id: parseInt(id) } });
@@ -77,4 +108,5 @@ module.exports = {
   updateNegocio,
   updateNegocioStatus,
   getNegocioById,
+  getNegociosConVentasPorCaja,
 };

@@ -5,6 +5,11 @@ const { verifyToken } = require("../auth");
 
 router.get("/negocio", verifyToken, negocioController.getNegocios);
 router.get("/getAllNegocios", verifyToken, negocioController.getAllNegocios);
+router.get(
+  "/negocio/por-caja/:cajaId",
+  verifyToken,
+  negocioController.getNegociosPorCaja
+);
 router.get("/negocio/:id", verifyToken, negocioController.getNegocioById);
 router.post("/negocio", verifyToken, negocioController.addNegocio);
 router.put("/negocio/:id", verifyToken, negocioController.updateNegocio);
