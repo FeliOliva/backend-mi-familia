@@ -66,7 +66,8 @@ const getVentaById = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
     const ventaData = await ventaModel.getVentaById(id);
-    res.status(200).json(ventaData);
+    // Asegurar que observacion siempre venga en la respuesta (aunque sea null) para editar
+    res.status(200).json({ ...ventaData, observacion: ventaData.observacion ?? null });
   } catch (error) {
     console.error("Error al obtener la venta:", error);
     res.status(500).json({ error: "Error al obtener la venta" });
@@ -225,7 +226,14 @@ const dropVenta = async (req, res) => {
 const updateVenta = async (req, res) => {
   try {
     const { id } = req.params;
-    const ventaUpdates = req.body;
+    const ventaUpdates = { ...req.body };
+    // Asegurar que observacion se pase siempre (string o null) para que se actualice
+    if (Object.prototype.hasOwnProperty.call(req.body, "observacion")) {
+      ventaUpdates.observacion =
+        req.body.observacion != null && String(req.body.observacion).trim() !== ""
+          ? String(req.body.observacion).trim().toUpperCase()
+          : null;
+    }
 
     if (!id) {
       return res.status(400).json({ error: "El id es obligatorio" });

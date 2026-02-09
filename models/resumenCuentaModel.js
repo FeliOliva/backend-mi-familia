@@ -17,6 +17,7 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
         fechaCreacion: true,
         total: true,
         cajaId: true,
+        observacion: true,
         detalleventa: {
           // Incluye los detalles de la venta
           select: {
@@ -106,7 +107,8 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
       monto: v.total,
       metodo_pago: null,
       cajaId: v.cajaId,
-      detalles: v.detalleventa, // Incluye los detalles en el resultado
+      observacion: v.observacion ?? null,
+      detalles: v.detalleventa,
     })),
     ...entregas.map((e) => ({
       tipo: "Entrega",
@@ -123,6 +125,7 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
       fecha: nc.fechaCreacion,
       monto: nc.monto,
       metodo_pago: null,
+      motivo: nc.motivo ?? null,
     })),
   ];
 

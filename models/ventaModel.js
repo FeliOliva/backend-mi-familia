@@ -10,19 +10,25 @@ async function getVentas({ limit, page, q, estado, startDate, endDate }) {
     if (startDate) fechaCreacion.gte = startDate;
     if (endDate) fechaCreacion.lte = endDate;
 
-    const where = {
-      AND: [
-        // Búsqueda por número de venta
-        q ? { nroVenta: { contains: q } } : {},
-        // Filtro por estado (si aplica)
-        estado === "activos"
-          ? { estadoPago: { not: 0 } }
-          : estado === "inactivos"
-          ? { estadoPago: 0 }
-          : {},
-        Object.keys(fechaCreacion).length ? { fechaCreacion } : {},
-      ],
-    };
+    const andConditions = [
+      // Búsqueda por número de venta o por nombre de negocio (principalmente negocio)
+      q && q.trim()
+        ? {
+            OR: [
+              { nroVenta: { contains: q.trim() } },
+              { negocio: { nombre: { contains: q.trim() } } },
+            ],
+          }
+        : {},
+      estado === "activos"
+        ? { estadoPago: { not: 0 } }
+        : estado === "inactivos"
+        ? { estadoPago: 0 }
+        : {},
+      Object.keys(fechaCreacion).length ? { fechaCreacion } : {},
+    ].filter((c) => Object.keys(c).length > 0);
+
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [ventasRaw, total] = await Promise.all([
       prisma.venta.findMany({
@@ -363,7 +369,15 @@ const updateVenta = async (id, data) => {
         where: { ventaId },
       });
 
-      // 5) Actualizar cabecera de venta
+      // 5) Actualizar cabecera de venta (observacion: usar data.observacion si viene; si no, mantener original)
+      const observacionEnviada = data.observacion;
+      const nuevaObservacion =
+        observacionEnviada !== undefined
+          ? (observacionEnviada != null && String(observacionEnviada).trim() !== ""
+              ? String(observacionEnviada).trim().toUpperCase()
+              : null)
+          : ventaOriginal.observacion;
+
       const ventaActualizada = await tx.venta.update({
         where: { id: ventaId },
         data: {
@@ -372,7 +386,7 @@ const updateVenta = async (id, data) => {
           totalPagado,
           restoPendiente,
           estadoPago,
-          observacion: data.observacion ?? ventaOriginal.observacion,
+          observacion: nuevaObservacion,
           negocioId: nuevoNegocioId,
           cajaId: data.cajaId ?? ventaOriginal.cajaId,
         },
