@@ -332,6 +332,18 @@ const recalcularVentaPorModificacionEntrega = async (ventaId, montoAnterior, mon
 
 const marcarVentaParaPagoOtroDia = async (ventaId) => {
   try {
+    const venta = await prisma.venta.findUnique({
+      where: { id: Number(ventaId) },
+    });
+    if (!venta) {
+      throw new Error("Venta no encontrada");
+    }
+    const totalPagado = Number(venta.totalPagado || 0);
+    if (totalPagado > 0) {
+      throw new Error(
+        "No se puede marcar para pago otro día una venta con pagos registrados."
+      );
+    }
     return await prisma.venta.update({
       where: { id: ventaId },
       data: { estadoPago: 3 },
@@ -426,6 +438,130 @@ const estaEnCierreCerrado = async (entregaId) => {
     console.error("Error verificando cierre cerrado:", error);
     // En caso de error, ser más restrictivo y no permitir la modificación
     return true;
+  }
+};
+
+const obtenerCierreCerradoParaEntrega = async (entrega) => {
+  try {
+    if (!entrega || !entrega.cajaId) return null;
+
+    const fechaEntrega = new Date(entrega.fechaCreacion);
+    const año = fechaEntrega.getFullYear();
+    const mes = fechaEntrega.getMonth();
+    const dia = fechaEntrega.getDate();
+    const finDiaEntrega = new Date(año, mes, dia, 23, 59, 59, 999);
+
+    return await prisma.cierrecaja.findFirst({
+      where: {
+        cajaId: entrega.cajaId,
+        estado: 1,
+        fecha: { lte: finDiaEntrega },
+      },
+      orderBy: { fecha: "desc" },
+    });
+  } catch (error) {
+    console.error("Error obteniendo cierre cerrado para entrega:", error);
+    return null;
+  }
+};
+
+const ajustarCierrePorEntregaEditada = async (
+  entregaActual,
+  montoAnterior,
+  montoNuevo,
+  metodoPagoIdNuevo
+) => {
+  try {
+    if (!entregaActual?.cajaId) return null;
+
+    const cierre = await obtenerCierreCerradoParaEntrega(entregaActual);
+    if (!cierre) return null;
+
+    const montoPrev = Number(montoAnterior || 0);
+    const montoNext = Number(montoNuevo || 0);
+    const delta = montoNext - montoPrev;
+
+    const metodoPagoIdAnterior = entregaActual.metodoPagoId ?? null;
+    const metodoPagoIdFinal = metodoPagoIdNuevo ?? metodoPagoIdAnterior;
+    const metodoIds = [metodoPagoIdAnterior, metodoPagoIdFinal].filter(Boolean);
+    const metodos = metodoIds.length
+      ? await prisma.metodopago.findMany({
+          where: { id: { in: metodoIds } },
+          select: { id: true, nombre: true },
+        })
+      : [];
+    const nombreById = metodos.reduce((acc, m) => {
+      acc[m.id] = m.nombre;
+      return acc;
+    }, {});
+    const esEfectivo = (nombre) =>
+      String(nombre || "").toLowerCase().includes("efectivo");
+
+    let deltaEfectivo = 0;
+    if (metodoPagoIdAnterior && esEfectivo(nombreById[metodoPagoIdAnterior])) {
+      deltaEfectivo -= montoPrev;
+    }
+    if (metodoPagoIdFinal && esEfectivo(nombreById[metodoPagoIdFinal])) {
+      deltaEfectivo += montoNext;
+    }
+
+    await prisma.cierrecaja.update({
+      where: { id: cierre.id },
+      data: {
+        totalPagado: { increment: delta },
+        ingresoLimpio: { increment: delta },
+        totalEfectivo: { increment: deltaEfectivo },
+        totalEfectivoBruto: { increment: deltaEfectivo },
+      },
+    });
+
+    const aplicarDeltaMetodo = async (metodoId, deltaMonto) => {
+      if (!metodoId || deltaMonto === 0) return;
+      const nombreMetodo = nombreById[metodoId] || "SIN MÉTODO";
+      const existente = await prisma.cierrecajametodopago.findFirst({
+        where: {
+          cierreCajaId: cierre.id,
+          metodoPago: nombreMetodo,
+        },
+      });
+      if (existente) {
+        await prisma.cierrecajametodopago.update({
+          where: { id: existente.id },
+          data: { total: { increment: deltaMonto } },
+        });
+      } else {
+        await prisma.cierrecajametodopago.create({
+          data: {
+            cierreCajaId: cierre.id,
+            metodoPago: nombreMetodo,
+            total: deltaMonto,
+          },
+        });
+      }
+    };
+
+    const nombreAnterior = metodoPagoIdAnterior
+      ? nombreById[metodoPagoIdAnterior] || "SIN MÉTODO"
+      : null;
+    const nombreFinal = metodoPagoIdFinal
+      ? nombreById[metodoPagoIdFinal] || "SIN MÉTODO"
+      : null;
+
+    if (nombreAnterior && nombreFinal && nombreAnterior === nombreFinal) {
+      await aplicarDeltaMetodo(metodoPagoIdFinal, delta);
+    } else {
+      if (metodoPagoIdAnterior) {
+        await aplicarDeltaMetodo(metodoPagoIdAnterior, -montoPrev);
+      }
+      if (metodoPagoIdFinal) {
+        await aplicarDeltaMetodo(metodoPagoIdFinal, montoNext);
+      }
+    }
+
+    return cierre.id;
+  } catch (error) {
+    console.error("Error ajustando cierre por entrega editada:", error);
+    return null;
   }
 };
 
@@ -617,5 +753,6 @@ module.exports = {
   getTotalesEntregasDelDiaPorCaja,
   getEntregasPorVenta,
   estaEnCierreCerrado,
+  ajustarCierrePorEntregaEditada,
   recalcularVentaPorModificacionEntrega,
 };

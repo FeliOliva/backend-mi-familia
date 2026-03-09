@@ -12,6 +12,7 @@ const getVentas = async (req, res) => {
     const q = (req.query.q || "").trim(); // texto de búsqueda
     const estado = req.query.estado || "todos"; // "activos" | "inactivos" | "todos"
     const { startDate, endDate } = req.query;
+    const includePendientes = String(req.query.includePendientes || "") === "1";
 
     let filterStartDate = null;
     let filterEndDate = null;
@@ -41,6 +42,7 @@ const getVentas = async (req, res) => {
       estado,
       startDate: filterStartDate,
       endDate: filterEndDate,
+      includePendientes,
     });
 
     res.status(200).json(ventasData);

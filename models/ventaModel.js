@@ -2,13 +2,37 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { cantidadConUnidad } = require("../utils/format");
 
-async function getVentas({ limit, page, q, estado, startDate, endDate }) {
+async function getVentas({
+  limit,
+  page,
+  q,
+  estado,
+  startDate,
+  endDate,
+  includePendientes = false,
+}) {
   try {
     const skip = (page - 1) * limit;
 
     const fechaCreacion = {};
     if (startDate) fechaCreacion.gte = startDate;
     if (endDate) fechaCreacion.lte = endDate;
+    const fechaCondition = Object.keys(fechaCreacion).length
+      ? { fechaCreacion }
+      : {};
+    const pendientesCondition =
+      includePendientes && startDate
+        ? {
+            AND: [
+              { estadoPago: { in: [1, 3, 5] } },
+              { fechaCreacion: { lt: startDate } },
+            ],
+          }
+        : null;
+    const fechaOrCondition =
+      includePendientes && pendientesCondition && Object.keys(fechaCreacion).length
+        ? { OR: [fechaCondition, pendientesCondition] }
+        : fechaCondition;
 
     const andConditions = [
       // Búsqueda por número de venta o por nombre de negocio (principalmente negocio)
@@ -25,7 +49,7 @@ async function getVentas({ limit, page, q, estado, startDate, endDate }) {
         : estado === "inactivos"
         ? { estadoPago: 0 }
         : {},
-      Object.keys(fechaCreacion).length ? { fechaCreacion } : {},
+      Object.keys(fechaOrCondition).length ? fechaOrCondition : {},
     ].filter((c) => Object.keys(c).length > 0);
 
     const where = andConditions.length > 0 ? { AND: andConditions } : {};
@@ -419,6 +443,12 @@ const updateVenta = async (id, data) => {
 
 const dropVenta = async (id) => {
   try {
+    await prisma.entregas.deleteMany({
+      where: {
+        ventaId: parseInt(id),
+      },
+    });
+
     await prisma.detalleventa.deleteMany({
       where: {
         ventaId: parseInt(id),

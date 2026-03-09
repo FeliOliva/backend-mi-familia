@@ -191,6 +191,21 @@ const addEntrega = async (req, res) => {
 
     // Si es un pago para otro día, sólo actualizamos la venta
     if (pagoOtroDia && ventaId) {
+      const venta = await entregaModel.getVentaById(ventaId);
+      if (!venta) {
+        return res.status(404).json({
+          success: false,
+          message: "Venta no encontrada",
+        });
+      }
+      const totalPagado = Number(venta.totalPagado || 0);
+      if (totalPagado > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "No se puede marcar para pago otro día una venta con pagos registrados.",
+        });
+      }
       const ventaActualizada = await entregaModel.marcarVentaParaPagoOtroDia(
         ventaId
       );
@@ -265,15 +280,6 @@ const updateEntrega = async (req, res) => {
       });
     }
 
-    // Validar que no esté en un cierre de caja cerrado
-    const enCierreCerrado = await entregaModel.estaEnCierreCerrado(id);
-    if (enCierreCerrado) {
-      return res.status(400).json({ 
-        success: false,
-        error: "No se puede modificar una entrega que ya está incluida en un cierre de caja cerrado" 
-      });
-    }
-
     const montoAnterior = entregaActual.monto;
     const montoNuevo = parseInt(monto);
 
@@ -295,6 +301,14 @@ const updateEntrega = async (req, res) => {
         actualizarVenta(entregaActual.cajaId, ventaActualizada, resultado.estadoSocket);
       }
     }
+
+    // Si la entrega estaba en un cierre cerrado, actualizar los totales del cierre
+    await entregaModel.ajustarCierrePorEntregaEditada(
+      entregaActual,
+      montoAnterior,
+      montoNuevo,
+      metodoPagoId
+    );
 
     res.json({
       success: true,

@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const entregaModel = require("../models/entregaModel");
 const cajaModel = require("../models/cajaModel");
+const gastoModel = require("../models/gastoModel");
 
 /**
  * Configuración del cierre automático de cajas
@@ -29,11 +30,16 @@ const procesarCierreCaja = async (caja, intento = 1) => {
     totalEntregado,
     totalCuentaCorriente = 0,
     metodospago = [],
+    totalGastos = 0,
   } = caja;
 
   try {
     const totalPagado = totalEntregado;
-    const ingresoLimpio = totalPagado;
+    const efectivoNeto = Math.max(
+      0,
+      Number(totalEfectivo || 0) - Number(totalGastos || 0),
+    );
+    const ingresoLimpio = 0;
 
     // Agrupar métodos de pago por nombre y sumar totales
     const metodosPagoAgrupados = metodospago.reduce((acc, m) => {
@@ -48,12 +54,12 @@ const procesarCierreCaja = async (caja, intento = 1) => {
 
     await cajaModel.crearCierreCaja({
       cajaId,
-      totalVentas: totalEntregado + totalCuentaCorriente,
+      totalVentas: totalEntregado,
       totalPagado,
       totalCuentaCorriente,
-      totalEfectivo,
+      totalEfectivo: efectivoNeto,
       totalEfectivoBruto: totalEfectivo,
-      totalGastos: 0,
+      totalGastos,
       ingresoLimpio,
       estado: 0, // 0 = cierre automático pendiente de revisar
       metodoPago: metodosPagoAgrupados,
@@ -63,7 +69,7 @@ const procesarCierreCaja = async (caja, intento = 1) => {
   } catch (error) {
     console.error(
       `   ❌ Error en caja ${cajaId} (intento ${intento}/${CONFIG.maxReintentos}):`,
-      error.message
+      error.message,
     );
 
     // Reintentar si no se alcanzó el máximo
@@ -94,6 +100,11 @@ const ejecutarCierreAutomatico = async () => {
   try {
     // Obtener los totales de entregas del día por caja
     const totalesPorCaja = await entregaModel.getTotalesEntregasDelDiaPorCaja();
+    const gastosPorCaja = await gastoModel.getTotalesGastosDelDiaPorCaja();
+    const gastosMap = {};
+    gastosPorCaja.forEach((g) => {
+      gastosMap[g.cajaId] = g.totalGastos || 0;
+    });
 
     if (!totalesPorCaja.length) {
       console.log("   ℹ️  No hay cajas pendientes para cerrar.");
@@ -107,12 +118,16 @@ const ejecutarCierreAutomatico = async () => {
     // Procesar cada caja
     for (const caja of totalesPorCaja) {
       console.log(`   🔄 Procesando caja ${caja.cajaId}...`);
-      
+
       // Verificar si ya existe un cierre de caja para esta caja en el día actual
-      const yaExisteCierre = await cajaModel.existeCierreCajaParaFecha(caja.cajaId);
-      
+      const yaExisteCierre = await cajaModel.existeCierreCajaParaFecha(
+        caja.cajaId,
+      );
+
       if (yaExisteCierre) {
-        console.log(`   ⚠️  Caja ${caja.cajaId} ya tiene un cierre de caja para hoy. Omitiendo...`);
+        console.log(
+          `   ⚠️  Caja ${caja.cajaId} ya tiene un cierre de caja para hoy. Omitiendo...`,
+        );
         console.log("-".repeat(60));
         continue;
       }
@@ -122,14 +137,22 @@ const ejecutarCierreAutomatico = async () => {
       console.log(`      - Otros: $${caja.totalOtros}`);
       console.log(`      - Cuenta corriente: $${caja.totalCuentaCorriente}`);
 
-      const resultado = await procesarCierreCaja(caja);
+      const resultado = await procesarCierreCaja({
+        ...caja,
+        totalGastos: gastosMap[caja.cajaId] || 0,
+      });
 
       if (resultado.success) {
         console.log(`   ✅ Caja ${caja.cajaId} cerrada correctamente`);
         resultados.exitosos.push(caja.cajaId);
       } else {
-        console.log(`   ❌ Caja ${caja.cajaId} falló después de ${CONFIG.maxReintentos} intentos`);
-        resultados.fallidos.push({ cajaId: caja.cajaId, error: resultado.error });
+        console.log(
+          `   ❌ Caja ${caja.cajaId} falló después de ${CONFIG.maxReintentos} intentos`,
+        );
+        resultados.fallidos.push({
+          cajaId: caja.cajaId,
+          error: resultado.error,
+        });
       }
       console.log("-".repeat(60));
     }
@@ -182,4 +205,3 @@ module.exports = {
   setupCierreCajaAutomatico,
   ejecutarCierreManual,
 };
-
