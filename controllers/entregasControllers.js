@@ -166,6 +166,30 @@ const getEntregasByNegocio = async (req, res) => {
   }
 };
 
+/**
+ * Ventas al contado (no cuenta corriente) asignadas a una caja: solo puede
+ * registrar cobro / "pago otro día" un usuario de esa misma caja.
+ * Cuenta corriente: se permite que otro usuario (p. ej. EV con transferencia)
+ * registre el pago aunque la venta esté en la caja del repartidor.
+ */
+const assertPuedeOperarVentaContadoEnCaja = async (req, venta) => {
+  if (!venta?.negocio) return;
+  if (venta.negocio.esCuentaCorriente) return;
+  if (venta.cajaId == null) return;
+
+  const usuarioId = req.user?.id;
+  const cajaUsuario = await entregaModel.getUsuarioCajaId(usuarioId);
+  if (cajaUsuario == null) return;
+
+  if (Number(venta.cajaId) !== Number(cajaUsuario)) {
+    const err = new Error(
+      "Esta venta está asignada a otra caja. Corregí la caja en la venta o registrá el cobro desde la caja asignada."
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+};
+
 const addEntrega = async (req, res) => {
   try {
     const { monto, metodoPagoId, cajaId, negocioId, ventaId, pagoOtroDia } =
@@ -177,10 +201,39 @@ const addEntrega = async (req, res) => {
       });
     }
 
-    // Validar que el monto no supere el saldo pendiente de la venta
+    let ventaParaValidar = null;
+    if (ventaId) {
+      ventaParaValidar = await entregaModel.getVentaById(ventaId);
+      if (!ventaParaValidar) {
+        return res.status(404).json({
+          success: false,
+          message: "Venta no encontrada",
+        });
+      }
+      try {
+        await assertPuedeOperarVentaContadoEnCaja(req, ventaParaValidar);
+      } catch (e) {
+        if (e.statusCode === 403) {
+          return res.status(403).json({ success: false, message: e.message });
+        }
+        throw e;
+      }
+
+      if (
+        ventaParaValidar.cajaId != null &&
+        Number(ventaParaValidar.cajaId) !== Number(cajaId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "La venta no está asignada a esta caja. Actualizá la lista: puede haber sido movida a otra caja.",
+        });
+      }
+    }
+
     if (ventaId && !pagoOtroDia) {
-      const venta = await entregaModel.getVentaById(ventaId);
-      const saldoPendiente = venta.total - (venta.totalPagado || 0);
+      const saldoPendiente =
+        ventaParaValidar.total - (ventaParaValidar.totalPagado || 0);
       if (parseFloat(monto) > saldoPendiente) {
         return res.status(400).json({
           success: false,
@@ -191,7 +244,7 @@ const addEntrega = async (req, res) => {
 
     // Si es un pago para otro día, sólo actualizamos la venta
     if (pagoOtroDia && ventaId) {
-      const venta = await entregaModel.getVentaById(ventaId);
+      const venta = ventaParaValidar;
       if (!venta) {
         return res.status(404).json({
           success: false,

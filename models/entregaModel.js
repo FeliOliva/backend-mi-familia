@@ -115,7 +115,7 @@ const getVentaById = async (id) => {
           },
         },
         negocio: {
-          select: { nombre: true },
+          select: { nombre: true, esCuentaCorriente: true },
         },
       },
     });
@@ -123,6 +123,17 @@ const getVentaById = async (id) => {
     console.error("Error obteniendo venta por id:", error);
     throw new Error("Error al obtener la venta por id");
   }
+};
+
+const getUsuarioCajaId = async (usuarioId) => {
+  if (usuarioId == null) return null;
+  const id = parseInt(usuarioId, 10);
+  if (Number.isNaN(id)) return null;
+  const u = await prisma.usuario.findUnique({
+    where: { id },
+    select: { cajaId: true },
+  });
+  return u?.cajaId ?? null;
 };
 
 const getEntregasByNegocio = async (
@@ -746,6 +757,7 @@ module.exports = {
   updateEntrega,
   dropEntrega,
   getVentaById,
+  getUsuarioCajaId,
   updateVenta,
   getUltimaEntregaDelDia,
   actualizarVentaPorEntrega,

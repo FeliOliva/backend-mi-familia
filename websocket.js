@@ -5,6 +5,8 @@ const url = require("url");
 const connections = {};
 const ventasPorCaja = {};
 
+let prismaRef = null;
+
 // --- Util común: normalizar shape para el frontend ---
 function normalizeVenta(dbVenta) {
   const detalles = (dbVenta.detalleventa || []).map((d) => ({
@@ -42,120 +44,131 @@ function normalizeVenta(dbVenta) {
   };
 }
 
+/**
+ * Misma lógica que la carga inicial: lista autoritativa desde BD para una caja.
+ */
+async function fetchVentasCajaDiaFromDb(prisma, cajaIdKey) {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const mañana = new Date(hoy);
+  mañana.setDate(hoy.getDate() + 1);
+  const cajaNum = Number(cajaIdKey);
+
+  const ventasDelDia = await prisma.venta.findMany({
+    where: {
+      fechaCreacion: { gte: hoy, lt: mañana },
+      cajaId: cajaNum,
+    },
+    include: {
+      detalleventa: {
+        include: {
+          producto: {
+            include: {
+              tipounidad: {
+                select: { tipo: true },
+              },
+            },
+          },
+        },
+      },
+      negocio: { select: { nombre: true } },
+    },
+  });
+
+  const otrasVentas = await prisma.venta.findMany({
+    where: {
+      fechaCreacion: { lt: hoy },
+      cajaId: cajaNum,
+      estadoPago: { in: [1, 3, 5] },
+    },
+    include: {
+      detalleventa: {
+        include: {
+          producto: {
+            include: {
+              tipounidad: {
+                select: { tipo: true },
+              },
+            },
+          },
+        },
+      },
+      negocio: { select: { nombre: true } },
+    },
+  });
+
+  const ventasPreviasCobradasHoy = await prisma.venta.findMany({
+    where: {
+      fechaCreacion: { lt: hoy },
+      cajaId: cajaNum,
+      estadoPago: 2,
+      entregas: {
+        some: {
+          fechaCreacion: { gte: hoy, lt: mañana },
+        },
+      },
+    },
+    include: {
+      detalleventa: {
+        include: {
+          producto: {
+            include: {
+              tipounidad: {
+                select: { tipo: true },
+              },
+            },
+          },
+        },
+      },
+      negocio: { select: { nombre: true } },
+    },
+  });
+
+  const ventasDb = [
+    ...ventasDelDia,
+    ...otrasVentas,
+    ...ventasPreviasCobradasHoy.filter(
+      (v) =>
+        !ventasDelDia.some((x) => x.id === v.id) &&
+        !otrasVentas.some((x) => x.id === v.id)
+    ),
+  ];
+
+  return ventasDb.map((v) => {
+    const base = normalizeVenta(v);
+    if (v.estadoPago === 3 || v.estadoPago === 5) {
+      base.fueAplazadaOParcial = true;
+    }
+    if (v.fechaCreacion < hoy && v.estadoPago === 2) {
+      base.fueAplazadaOParcial = true;
+    }
+    return base;
+  });
+}
+
+async function emitVentasInicialesDesdeDb(cajaIdKey) {
+  if (!prismaRef) return;
+  const key = String(cajaIdKey);
+  try {
+    const ventas = await fetchVentasCajaDiaFromDb(prismaRef, key);
+    ventasPorCaja[key] = ventas;
+    const msg = JSON.stringify({ tipo: "ventas-iniciales", data: ventas });
+    connections[key]?.forEach(
+      (ws) => ws.readyState === 1 && ws.send(msg)
+    );
+  } catch (e) {
+    console.error("emitVentasInicialesDesdeDb", key, e);
+  }
+}
+
 function setupWebSocket(server, prisma) {
+  prismaRef = prisma;
   const wss = new WebSocketServer({ server });
 
   const cargarVentasDelDia = async (cajaId) => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    const mañana = new Date(hoy);
-    mañana.setDate(hoy.getDate() + 1);
-
-    // 1) ventas de HOY (cualquier estado)
-    const ventasDelDia = await prisma.venta.findMany({
-      where: {
-        fechaCreacion: { gte: hoy, lt: mañana },
-        cajaId: Number(cajaId),
-      },
-      include: {
-        detalleventa: {
-          include: {
-            producto: {
-              include: {
-                tipounidad: {
-                  select: { tipo: true },
-                },
-              },
-            },
-          },
-        },
-        negocio: { select: { nombre: true } },
-      },
-    });
-
-    // 2) ventas de días anteriores pero con estado 1/3/5
-    const otrasVentas = await prisma.venta.findMany({
-      where: {
-        fechaCreacion: { lt: hoy },
-        cajaId: Number(cajaId),
-        estadoPago: { in: [1, 3, 5] },
-      },
-      include: {
-        detalleventa: {
-          include: {
-            producto: {
-              include: {
-                tipounidad: {
-                  select: { tipo: true },
-                },
-              },
-            },
-          },
-        },
-        negocio: { select: { nombre: true } },
-      },
-    });
-
-    // 3) ventas viejas (fecha < hoy) que se COBRARON HOY (estadoPago = 2)
-    //    es decir: tienen al menos una entrega con fecha de hoy
-    const ventasPreviasCobradasHoy = await prisma.venta.findMany({
-      where: {
-        fechaCreacion: { lt: hoy },
-        cajaId: Number(cajaId),
-        estadoPago: 2,
-        // 👇 importante: el nombre correcto de la relación es "entregas"
-        entregas: {
-          some: {
-            fechaCreacion: { gte: hoy, lt: mañana },
-          },
-        },
-      },
-      include: {
-        detalleventa: {
-          include: {
-            producto: {
-              include: {
-                tipounidad: {
-                  select: { tipo: true },
-                },
-              },
-            },
-          },
-        },
-        negocio: { select: { nombre: true } },
-      },
-    });
-
-    // Unimos todo, evitando duplicados por id
-    const ventasDb = [
-      ...ventasDelDia,
-      ...otrasVentas,
-      ...ventasPreviasCobradasHoy.filter(
-        (v) =>
-          !ventasDelDia.some((x) => x.id === v.id) &&
-          !otrasVentas.some((x) => x.id === v.id)
-      ),
-    ];
-
-    // Normalizamos y marcamos especiales
-    const ventas = ventasDb.map((v) => {
-      const base = normalizeVenta(v);
-
-      // si está aplazada o parcial
-      if (v.estadoPago === 3 || v.estadoPago === 5) {
-        base.fueAplazadaOParcial = true;
-      }
-
-      // si es vieja (fecha < hoy) pero está cobrada (2)
-      // y apareció en ventasPreviasCobradasHoy, también la marcamos
-      if (v.fechaCreacion < hoy && v.estadoPago === 2) {
-        base.fueAplazadaOParcial = true;
-      }
-
-      return base;
-    });
-
-    ventasPorCaja[cajaId] = ventas;
+    const key = String(cajaId);
+    const ventas = await fetchVentasCajaDiaFromDb(prisma, key);
+    ventasPorCaja[key] = ventas;
     return ventas;
   };
 
@@ -224,7 +237,6 @@ function broadcastNuevaVenta(dbVenta) {
   if (Number.isFinite(Number(dbVenta?.cajaId))) {
     return enviarNuevaVenta(dbVenta.cajaId, dbVenta);
   }
-  // fallback
   const venta = normalizeVenta(dbVenta);
   Object.keys(connections).forEach((key) => {
     connections[key].forEach(
@@ -237,15 +249,18 @@ function broadcastNuevaVenta(dbVenta) {
 
 function eliminarVenta(cajaId, ventaId) {
   const key = String(cajaId);
-  if (!ventasPorCaja[key]) return;
-  ventasPorCaja[key] = ventasPorCaja[key].filter(
-    (v) => v.id !== Number(ventaId)
-  );
+  if (ventasPorCaja[key]) {
+    ventasPorCaja[key] = ventasPorCaja[key].filter(
+      (v) => Number(v.id) !== Number(ventaId)
+    );
+  }
 
   const msg = { tipo: "venta-eliminada", data: { id: Number(ventaId) } };
   connections[key]?.forEach(
     (ws) => ws.readyState === 1 && ws.send(JSON.stringify(msg))
   );
+
+  void emitVentasInicialesDesdeDb(key);
 }
 
 function actualizarVenta(
@@ -254,30 +269,31 @@ function actualizarVenta(
   tipo = "venta-actualizada"
 ) {
   const key = String(cajaId);
-  if (!ventasPorCaja[key]) return;
+  if (ventasPorCaja[key]) {
+    const anterior = ventasPorCaja[key].find(
+      (v) => v.id === Number(dbVentaActualizada.id)
+    );
+    const ventaNormalizada = normalizeVenta(dbVentaActualizada);
+    const fueAplazadaOParcial =
+      anterior?.fueAplazadaOParcial ||
+      anterior?.estadoPago === 3 ||
+      anterior?.estadoPago === 5;
 
-  // Buscar la versión anterior en memoria
-  const anterior = ventasPorCaja[key].find(
-    (v) => v.id === Number(dbVentaActualizada.id)
-  );
-  const ventaNormalizada = normalizeVenta(dbVentaActualizada);
-  const fueAplazadaOParcial =
-    anterior?.fueAplazadaOParcial ||
-    anterior?.estadoPago === 3 ||
-    anterior?.estadoPago === 5;
+    const venta = {
+      ...ventaNormalizada,
+      fueAplazadaOParcial,
+    };
+    ventasPorCaja[key] = ventasPorCaja[key].map((v) =>
+      v.id === venta.id ? venta : v
+    );
 
-  const venta = {
-    ...ventaNormalizada,
-    fueAplazadaOParcial,
-  };
-  ventasPorCaja[key] = ventasPorCaja[key].map((v) =>
-    v.id === venta.id ? venta : v
-  );
+    const msg = { tipo, data: venta };
+    connections[key]?.forEach(
+      (ws) => ws.readyState === 1 && ws.send(JSON.stringify(msg))
+    );
+  }
 
-  const msg = { tipo, data: venta };
-  connections[key]?.forEach(
-    (ws) => ws.readyState === 1 && ws.send(JSON.stringify(msg))
-  );
+  void emitVentasInicialesDesdeDb(key);
 }
 
 module.exports = {

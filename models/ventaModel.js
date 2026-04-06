@@ -427,6 +427,13 @@ const updateVenta = async (id, data) => {
         })),
       });
 
+      if (cajaAnterior !== ventaActualizada.cajaId) {
+        await tx.entregas.updateMany({
+          where: { ventaId },
+          data: { cajaId: ventaActualizada.cajaId },
+        });
+      }
+
       // 7) Volvemos un objeto "simple" para el controller
       return {
         ...ventaActualizada,
