@@ -31,6 +31,7 @@ const resumenCuentaRoutes = require("./routes/resumenCuenta");
 const cajaRoutes = require("./routes/cajaRoutes");
 const metodosPagoRoutes = require("./routes/metodosPagoRoutes");
 const pedidoRoutes = require("./routes/pedidoRoutes");
+const presupuestoRoutes = require("./routes/presupuestoRoutes");
 const saldoInicialRoutes = require("./routes/saldoInicialRoutes");
 const gastoRoutes = require("./routes/gastoRoutes");
 const estadisticasRoutes = require("./routes/estadisticasRoutes");
@@ -99,6 +100,7 @@ app.use(
   cajaRoutes,
   metodosPagoRoutes,
   pedidoRoutes,
+  presupuestoRoutes,
   saldoInicialRoutes,
   gastoRoutes,
   estadisticasRoutes
