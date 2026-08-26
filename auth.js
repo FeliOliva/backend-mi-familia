@@ -41,7 +41,7 @@ const verifyToken = (req, res, next) => {
 
 // Generar un token JWT
 const generateToken = (user) => {
-  return jwt.sign({ id: user.id, usuario: user.usuario }, JWT_SECRET, {
+  return jwt.sign({ id: user.id, usuario: user.usuario, rol: user.rol }, JWT_SECRET, {
     // podés cambiarlo a "8h", "12h", "24h" según lo que quieras
     expiresIn: "8h",
   });

@@ -43,6 +43,7 @@ const getVentas = async (req, res) => {
       startDate: filterStartDate,
       endDate: filterEndDate,
       includePendientes,
+      esAdmin: Number(req.user?.rol) === 0,
     });
 
     res.status(200).json(ventasData);

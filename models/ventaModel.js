@@ -10,6 +10,7 @@ async function getVentas({
   startDate,
   endDate,
   includePendientes = false,
+  esAdmin = false,
 }) {
   try {
     const skip = (page - 1) * limit;
@@ -50,6 +51,8 @@ async function getVentas({
         ? { estadoPago: 0 }
         : {},
       Object.keys(fechaOrCondition).length ? fechaOrCondition : {},
+      // Ocultar ventas de negocios privados a quien no sea admin
+      esAdmin ? {} : { negocio: { esPrivado: false } },
     ].filter((c) => Object.keys(c).length > 0);
 
     const where = andConditions.length > 0 ? { AND: andConditions } : {};

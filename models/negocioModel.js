@@ -1,14 +1,19 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-const getNegocios = async (limit, page) => {
+// Los negocios privados solo son visibles para el admin (esAdmin === true)
+const filtroPrivado = (esAdmin) => (esAdmin ? {} : { esPrivado: false });
+
+const getNegocios = async (limit, page, esAdmin = false) => {
   try {
     const offset = (page - 1) * limit;
+    const where = filtroPrivado(esAdmin);
     const negocios = await prisma.negocio.findMany({
+      where,
       skip: offset,
       take: limit,
     });
-    const totalNegocios = await prisma.negocio.count();
+    const totalNegocios = await prisma.negocio.count({ where });
     return {
       negocios,
       total: totalNegocios,
@@ -20,10 +25,11 @@ const getNegocios = async (limit, page) => {
     throw new Error("Error al obtener los negocios");
   }
 };
-const getAllNegocios = async () => {
+const getAllNegocios = async (esAdmin = false) => {
   try {
-    const negocios = await prisma.negocio.findMany();
-    const totalNegocios = await prisma.negocio.count();
+    const where = filtroPrivado(esAdmin);
+    const negocios = await prisma.negocio.findMany({ where });
+    const totalNegocios = await prisma.negocio.count({ where });
     return {
       negocios,
       total: totalNegocios,
@@ -33,7 +39,7 @@ const getAllNegocios = async () => {
     throw new Error("Error al obtener los negocios");
   }
 };
-const getNegociosConVentasPorCaja = async (cajaId) => {
+const getNegociosConVentasPorCaja = async (cajaId, esAdmin = false) => {
   try {
     const cajaIdNum = parseInt(cajaId);
     if (Number.isNaN(cajaIdNum)) {
@@ -41,6 +47,7 @@ const getNegociosConVentasPorCaja = async (cajaId) => {
     }
 
     const whereClause = {
+      ...filtroPrivado(esAdmin),
       venta: {
         some: {
           cajaId: cajaIdNum,

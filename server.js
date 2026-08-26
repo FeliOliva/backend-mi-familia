@@ -70,7 +70,11 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Credenciales incorrectas" });
     }
 
-    const token = generateToken({ id: user.id, usuario: user.usuario });
+    const token = generateToken({
+      id: user.id,
+      usuario: user.usuario,
+      rol: user.rol,
+    });
 
     res.json({
       token,

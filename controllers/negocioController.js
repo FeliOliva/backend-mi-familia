@@ -1,5 +1,8 @@
 const negocioModel = require("../models/negocioModel");
 
+// El admin tiene rol 0. Solo el admin puede ver/crear negocios privados.
+const esAdminReq = (req) => Number(req.user?.rol) === 0;
+
 const getNegocios = async (req, res) => {
   try {
     const { page, limit } = req.query;
@@ -13,7 +16,8 @@ const getNegocios = async (req, res) => {
 
     const negociosData = await negocioModel.getNegocios(
       limitNumber,
-      pageNumber
+      pageNumber,
+      esAdminReq(req)
     );
     res.status(200).json(negociosData);
   } catch (error) {
@@ -24,7 +28,7 @@ const getNegocios = async (req, res) => {
 
 const getAllNegocios = async (req, res) => {
   try {
-    const negociosData = await negocioModel.getAllNegocios();
+    const negociosData = await negocioModel.getAllNegocios(esAdminReq(req));
     res.status(200).json(negociosData);
   } catch (error) {
     console.error("Error al obtener los negocios:", error);
@@ -37,7 +41,10 @@ const getNegociosPorCaja = async (req, res) => {
     if (!cajaId) {
       return res.status(400).json({ error: "El cajaId es obligatorio" });
     }
-    const negociosData = await negocioModel.getNegociosConVentasPorCaja(cajaId);
+    const negociosData = await negocioModel.getNegociosConVentasPorCaja(
+      cajaId,
+      esAdminReq(req)
+    );
     res.status(200).json(negociosData);
   } catch (error) {
     console.error("Error al obtener los negocios por caja:", error);
@@ -59,8 +66,14 @@ const getNegocioById = async (req, res) => {
 };
 const addNegocio = async (req, res) => {
   try {
-    const { nombre, direccion, esCuentaCorriente, esEditable, rol_usuario } =
-      req.body;
+    const {
+      nombre,
+      direccion,
+      esCuentaCorriente,
+      esEditable,
+      esPrivado,
+      rol_usuario,
+    } = req.body;
     if (![0, 1].includes(rol_usuario)) {
       return res
         .status(403)
@@ -72,11 +85,15 @@ const addNegocio = async (req, res) => {
         .json({ error: "Todos los campos son obligatorios" });
     }
 
+    // Solo el admin (rol 0) puede marcar un negocio como privado
+    const puedeMarcarPrivado = esAdminReq(req) || Number(rol_usuario) === 0;
+
     const newNegocio = await negocioModel.addNegocio({
       nombre: nombre.toUpperCase(),
       direccion: direccion.toUpperCase(),
       esCuentaCorriente: !!esCuentaCorriente,
       esEditable: !!esEditable, // ⬅️ nuevo
+      esPrivado: puedeMarcarPrivado ? !!esPrivado : false,
     });
     res.json(newNegocio);
   } catch (error) {
@@ -91,7 +108,14 @@ const updateNegocio = async (req, res) => {
       return res.status(400).json({ error: "El id es obligatorio" });
     }
 
-    const { nombre, direccion, esCuentaCorriente, esEditable } = req.body;
+    const {
+      nombre,
+      direccion,
+      esCuentaCorriente,
+      esEditable,
+      esPrivado,
+      rol_usuario,
+    } = req.body;
 
     if (!nombre || !direccion) {
       return res
@@ -103,11 +127,16 @@ const updateNegocio = async (req, res) => {
     if (!negocio) {
       return res.status(404).json({ error: "El negocio no existe" });
     }
+
+    // Solo el admin puede cambiar el flag privado; el resto conserva el valor actual
+    const puedeMarcarPrivado = esAdminReq(req) || Number(rol_usuario) === 0;
+
     await negocioModel.updateNegocio(id, {
       nombre: nombre.toUpperCase(),
       direccion: direccion.toUpperCase(),
       esCuentaCorriente: !!esCuentaCorriente,
       esEditable: !!esEditable,
+      esPrivado: puedeMarcarPrivado ? !!esPrivado : negocio.esPrivado,
     });
     res.status(200).json({ message: "Negocio actualizado correctamente" });
   } catch (error) {
