@@ -35,6 +35,7 @@ const presupuestoRoutes = require("./routes/presupuestoRoutes");
 const saldoInicialRoutes = require("./routes/saldoInicialRoutes");
 const gastoRoutes = require("./routes/gastoRoutes");
 const estadisticasRoutes = require("./routes/estadisticasRoutes");
+const catalogosRoutes = require("./routes/catalogosRoutes");
 
 app.use(
   cors({
@@ -107,7 +108,8 @@ app.use(
   presupuestoRoutes,
   saldoInicialRoutes,
   gastoRoutes,
-  estadisticasRoutes
+  estadisticasRoutes,
+  catalogosRoutes
 );
 
 server.listen(PORT, () => {

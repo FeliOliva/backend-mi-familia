@@ -87,11 +87,11 @@ const addGasto = async (data) => {
   }
 };
 
-const updateGasto = async (id, motivo, monto) => {
+const updateGasto = async (id, data) => {
   try {
     return await prisma.gasto.update({
       where: { id: parseInt(id) },
-      data: { motivo, monto },
+      data,
     });
   } catch (error) {
     console.error("Error al actualizar el gasto", error);

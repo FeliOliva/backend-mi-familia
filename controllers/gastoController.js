@@ -1,4 +1,7 @@
 const gastoModel = require("../models/gastoModel");
+const { PrismaClient } = require("@prisma/client");
+const { normalizarNombre } = require("./catalogosController");
+const prisma = new PrismaClient();
 
 const getGastos = async (req, res) => {
   try {
@@ -71,16 +74,46 @@ const getGastosDelDia = async (req, res) => {
   }
 };
 
+/**
+ * Resuelve el motivo del gasto contra el catalogo.
+ * - motivoGastoId (front nuevo): se usa ese motivo.
+ * - solo texto `motivo` (front viejo durante el deploy): se busca por nombre;
+ *   si no esta en el catalogo va a OTRO con el texto como detalle, para no
+ *   perder el dato.
+ * Devuelve { motivo, motivoGastoId, detalle } o null si no hay motivo.
+ */
+const resolverMotivo = async ({ motivoGastoId, motivo, detalle }) => {
+  const detalleLimpio = detalle ? String(detalle).trim().toUpperCase() || null : null;
+  if (motivoGastoId) {
+    const m = await prisma.motivogasto.findUnique({ where: { id: parseInt(motivoGastoId) } });
+    return m ? { motivo: m.nombre, motivoGastoId: m.id, detalle: detalleLimpio } : null;
+  }
+  const nombre = normalizarNombre(motivo);
+  if (!nombre) return null;
+  const m = await prisma.motivogasto.findUnique({ where: { nombre } });
+  if (m) return { motivo: m.nombre, motivoGastoId: m.id, detalle: detalleLimpio };
+  const otro = await prisma.motivogasto.findUnique({ where: { nombre: "OTRO" } });
+  return {
+    motivo: otro ? otro.nombre : nombre,
+    motivoGastoId: otro ? otro.id : null,
+    detalle: detalleLimpio || nombre,
+  };
+};
+
 const addGasto = async (req, res) => {
   try {
-    const { motivo, monto, cajaId } = req.body;
+    const { motivo, motivoGastoId, detalle, monto, cajaId } = req.body;
     const usuarioId = req.user?.id;
-    if (!motivo || !monto || !usuarioId || !cajaId) {
+    if ((!motivo && !motivoGastoId) || !monto || !usuarioId || !cajaId) {
       return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+    const motivoResuelto = await resolverMotivo({ motivoGastoId, motivo, detalle });
+    if (!motivoResuelto) {
+      return res.status(400).json({ error: "Motivo inválido" });
     }
 
     const gastoData = await gastoModel.addGasto({
-      motivo: String(motivo).toUpperCase(),
+      ...motivoResuelto,
       monto: parseInt(monto),
       estado: 1,
       usuarioId: parseInt(usuarioId),
@@ -95,17 +128,20 @@ const addGasto = async (req, res) => {
 
 const updateGasto = async (req, res) => {
   try {
-    const { motivo, monto } = req.body;
+    const { motivo, motivoGastoId, detalle, monto } = req.body;
     const { id } = req.params;
-    if (!id || !motivo || !monto) {
+    if (!id || (!motivo && !motivoGastoId) || !monto) {
       return res.status(400).json({ error: "Faltan datos obligatorios" });
     }
+    const motivoResuelto = await resolverMotivo({ motivoGastoId, motivo, detalle });
+    if (!motivoResuelto) {
+      return res.status(400).json({ error: "Motivo inválido" });
+    }
 
-    const gastoData = await gastoModel.updateGasto(
-      id,
-      String(motivo).toUpperCase(),
-      parseInt(monto)
-    );
+    const gastoData = await gastoModel.updateGasto(id, {
+      ...motivoResuelto,
+      monto: parseInt(monto),
+    });
     res.json(gastoData);
   } catch (error) {
     console.error("Error al actualizar el gasto", error);

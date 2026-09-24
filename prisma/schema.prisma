@@ -20,9 +20,33 @@ model caja {
   venta         venta[]
 }
 
+// Catalogo de bancos. Reemplaza el texto libre de cheque.banco, que generaba
+// duplicados (CORDOBA/BANCOR, SANTANDER/SANTANDER RIO...).
+model banco {
+  id      Int      @id @default(autoincrement())
+  nombre  String   @unique(map: "Banco_nombre_key")
+  activo  Boolean  @default(true)
+  cheques cheque[]
+}
+
+// Catalogo de motivos de gasto. Reemplaza el texto libre de gasto.motivo, que
+// generaba variantes mal escritas (GASOIL/GASOLI/GASIOL...).
+model motivogasto {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique(map: "MotivoGasto_nombre_key")
+  activo Boolean @default(true)
+  gastos gasto[]
+}
+
 model cheque {
   id            Int      @id @default(autoincrement())
+  // Texto del banco. Se mantiene por compatibilidad (reportes y PDFs lo leen)
+  // y se completa con el nombre del catalogo; la referencia real es bancoId.
   banco         String
+  bancoId       Int?
+  bancoRef      banco?   @relation(fields: [bancoId], references: [id], map: "Cheque_bancoId_fkey")
+  // Cheque electronico (ECHEQ). Antes se cargaba "ECHEQ." como si fuera banco.
+  esElectronico Boolean  @default(false)
   nroCheque     String   @unique(map: "Cheque_nroCheque_key")
   nroEntrega    String? // 👈 nuevo campo para identificar internamente
   fechaCreacion DateTime @default(now())
@@ -34,6 +58,7 @@ model cheque {
   negocio       negocio? @relation(fields: [negocioId], references: [id], map: "Cheque_negocioId_fkey")
 
   @@index([negocioId], map: "Cheque_negocioId_fkey")
+  @@index([bancoId], map: "Cheque_bancoId_fkey")
 }
 
 model cierrecaja {
@@ -291,7 +316,13 @@ model venta {
 model gasto {
   id            Int      @id @default(autoincrement())
   monto         Int
+  // Texto del motivo. Se mantiene por compatibilidad (estadisticas, cierre de
+  // caja y PDFs lo leen) y se completa con el nombre del catalogo.
   motivo        String
+  motivoGastoId Int?
+  motivoGasto   motivogasto? @relation(fields: [motivoGastoId], references: [id], map: "Gasto_motivoGastoId_fkey")
+  // Lo especifico de ese gasto (ej. motivo DESCARGA, detalle PAPA).
+  detalle       String?
   fechaCreacion DateTime @default(now())
   estado        Int      @default(1)
   usuarioId     Int
@@ -301,4 +332,5 @@ model gasto {
 
   @@index([usuarioId], map: "Gasto_usuarioId_fkey")
   @@index([cajaId], map: "Gasto_cajaId_fkey")
+  @@index([motivoGastoId], map: "Gasto_motivoGastoId_fkey")
 }

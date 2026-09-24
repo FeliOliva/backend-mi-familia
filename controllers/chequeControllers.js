@@ -1,4 +1,25 @@
 const chequeModel = require("../models/chequeModel");
+const { PrismaClient } = require("@prisma/client");
+const { normalizarNombre } = require("./catalogosController");
+const prisma = new PrismaClient();
+
+/**
+ * Resuelve el banco del cheque contra el catalogo.
+ * - bancoId (front nuevo): se usa ese banco.
+ * - solo texto `banco` (front viejo durante el deploy): se busca por nombre.
+ * Devuelve { bancoId, banco } o null si no hay banco valido.
+ */
+const resolverBanco = async ({ bancoId, banco }) => {
+  if (bancoId) {
+    const b = await prisma.banco.findUnique({ where: { id: parseInt(bancoId) } });
+    return b ? { bancoId: b.id, banco: b.nombre } : null;
+  }
+  const nombre = normalizarNombre(banco);
+  if (!nombre) return null;
+  const b = await prisma.banco.findUnique({ where: { nombre } });
+  // Texto que no esta en el catalogo: se guarda igual, sin bancoId.
+  return b ? { bancoId: b.id, banco: b.nombre } : { bancoId: null, banco: nombre };
+};
 
 const getCheques = async (req, res) => {
   try {
@@ -80,13 +101,21 @@ const getChequesByNegocio = async (req, res) => {
 };
 const addCheque = async (req, res) => {
   try {
-    const { banco, nroCheque, fechaEmision, fechaCobro, monto, negocioId } =
-      req.body;
+    const {
+      banco,
+      bancoId,
+      esElectronico,
+      nroCheque,
+      fechaEmision,
+      fechaCobro,
+      monto,
+      negocioId,
+    } = req.body;
     console.log("data del cheque en add: ", req.body);
 
     // Verificar que todos los campos estén presentes
     if (
-      !banco ||
+      (!banco && !bancoId) ||
       !nroCheque ||
       !fechaEmision ||
       !fechaCobro ||
@@ -104,8 +133,14 @@ const addCheque = async (req, res) => {
       return new Date(year, month - 1, day);
     };
 
+    const bancoResuelto = await resolverBanco({ bancoId, banco });
+    if (!bancoResuelto) {
+      return res.status(400).json({ error: "Banco inválido" });
+    }
+
     const cheque = {
-      banco: banco.toUpperCase(),
+      ...bancoResuelto,
+      esElectronico: Boolean(esElectronico),
       nroCheque,
       fechaEmision: parseDate(fechaEmision),
       fechaCobro: parseDate(fechaCobro),
@@ -137,10 +172,18 @@ const addCheque = async (req, res) => {
 const updateCheque = async (req, res) => {
   try {
     const { id } = req.params;
-    const { banco, nroCheque, fechaEmision, fechaCobro, monto, negocioId } =
-      req.body;
+    const {
+      banco,
+      bancoId,
+      esElectronico,
+      nroCheque,
+      fechaEmision,
+      fechaCobro,
+      monto,
+      negocioId,
+    } = req.body;
     if (
-      !banco ||
+      (!banco && !bancoId) ||
       !nroCheque ||
       !fechaEmision ||
       !fechaCobro ||
@@ -157,8 +200,14 @@ const updateCheque = async (req, res) => {
       const [day, month, year] = dateString.split("/").map(Number);
       return new Date(year, month - 1, day).toISOString(); // Formato ISO
     };
+    const bancoResuelto = await resolverBanco({ bancoId, banco });
+    if (!bancoResuelto) {
+      return res.status(400).json({ error: "Banco inválido" });
+    }
     const updatedCheque = await chequeModel.updateCheque(id, {
-      banco: banco.toUpperCase(),
+      ...bancoResuelto,
+      // Solo se toca si el front lo manda (el front viejo no lo conoce).
+      ...(esElectronico !== undefined && { esElectronico: Boolean(esElectronico) }),
       nroCheque,
       fechaEmision: parseDate(fechaEmision),
       fechaCobro: parseDate(fechaCobro),

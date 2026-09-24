@@ -39,6 +39,18 @@ const verifyToken = (req, res, next) => {
   });
 };
 
+// Middleware para restringir una ruta a ciertos roles (0 admin, 1 encargado,
+// 2 repartidor). Usar despues de verifyToken, que deja el rol en req.user.
+const requireRol = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(Number(req.user.rol))) {
+    return res.status(403).json({
+      code: "FORBIDDEN",
+      message: "No tenés permiso para realizar esta acción.",
+    });
+  }
+  next();
+};
+
 // Generar un token JWT
 const generateToken = (user) => {
   return jwt.sign({ id: user.id, usuario: user.usuario, rol: user.rol }, JWT_SECRET, {
@@ -47,4 +59,4 @@ const generateToken = (user) => {
   });
 };
 
-module.exports = { verifyToken, generateToken };
+module.exports = { verifyToken, requireRol, generateToken };
