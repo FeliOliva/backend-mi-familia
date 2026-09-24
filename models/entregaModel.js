@@ -384,7 +384,7 @@ const updateEntrega = async (id, monto, metodoPagoId) => {
       data.metodoPagoId = parseInt(metodoPagoId);
     }
     
-    return await prisma.entregas.update({
+    const entrega = await prisma.entregas.update({
       where: { id: parseInt(id) },
       data,
       include: {
@@ -396,6 +396,15 @@ const updateEntrega = async (id, monto, metodoPagoId) => {
         },
       },
     });
+
+    // Si el pago tiene un cheque vinculado, el cheque es ese mismo dinero:
+    // mantener el monto sincronizado.
+    await prisma.cheque.updateMany({
+      where: { entregaId: entrega.id },
+      data: { monto: entrega.monto },
+    });
+
+    return entrega;
   } catch (error) {
     console.error("Error actualizando entrega:", error);
     throw new Error("Error al actualizar la entrega");
@@ -749,7 +758,22 @@ const getTotalesEntregasDelDiaPorCaja = async () => {
   return Object.values(cajasMap);
 };
 
+// Vincula un cheque existente con el pago con el que se cobro. Solo si el
+// cheque todavia no tiene pago, para no pisar un vinculo previo.
+const vincularCheque = async (chequeId, entregaId) => {
+  const res = await prisma.cheque.updateMany({
+    where: { id: parseInt(chequeId), entregaId: null },
+    data: { entregaId: parseInt(entregaId) },
+  });
+  if (res.count === 0) {
+    throw new Error(
+      `Cheque ${chequeId} inexistente o ya vinculado a otro pago`,
+    );
+  }
+};
+
 module.exports = {
+  vincularCheque,
   getAllEntregas,
   getEntregaById,
   getEntregasByNegocio,

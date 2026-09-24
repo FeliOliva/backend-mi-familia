@@ -52,6 +52,9 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
           select: { nombre: true },
         },
         fechaCreacion: true,
+        cheque: {
+          select: { id: true, nroCheque: true, banco: true },
+        },
       },
     }),
 
@@ -117,6 +120,7 @@ const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
       fecha: e.fechaCreacion,
       monto: e.monto,
       metodo_pago: e.metodopago?.nombre || null,
+      cheque: e.cheque || null,
     })),
     ...notasCredito.map((nc) => ({
       tipo: "Nota de Crédito",

@@ -56,6 +56,11 @@ model cheque {
   estado        Int      @default(1)
   negocioId     Int?
   negocio       negocio? @relation(fields: [negocioId], references: [id], map: "Cheque_negocioId_fkey")
+  // Pago (entrega) con el que se cobro este cheque. Opcional: los cheques
+  // cargados a mano desde el panel no tienen entrega. Si se borra la entrega
+  // se borra el cheque, para que no quede huerfano.
+  entregaId     Int?      @unique(map: "Cheque_entregaId_key")
+  entrega       entregas? @relation(fields: [entregaId], references: [id], onDelete: Cascade, map: "Cheque_entregaId_fkey")
 
   @@index([negocioId], map: "Cheque_negocioId_fkey")
   @@index([bancoId], map: "Cheque_bancoId_fkey")
@@ -121,6 +126,7 @@ model entregas {
   metodopago    metodopago? @relation(fields: [metodoPagoId], references: [id], map: "Entregas_metodoPagoId_fkey")
   negocio       negocio     @relation(fields: [negocioId], references: [id], map: "Entregas_negocioId_fkey")
   venta         venta?      @relation(fields: [ventaId], references: [id], map: "Entregas_ventaId_fkey")
+  cheque        cheque?
 
   @@index([cajaId], map: "Entregas_cajaId_fkey")
   @@index([metodoPagoId], map: "Entregas_metodoPagoId_fkey")

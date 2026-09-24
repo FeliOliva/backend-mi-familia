@@ -192,8 +192,15 @@ const assertPuedeOperarVentaContadoEnCaja = async (req, venta) => {
 
 const addEntrega = async (req, res) => {
   try {
-    const { monto, metodoPagoId, cajaId, negocioId, ventaId, pagoOtroDia } =
-      req.body;
+    const {
+      monto,
+      metodoPagoId,
+      cajaId,
+      negocioId,
+      ventaId,
+      pagoOtroDia,
+      chequeId, // opcional: cheque ya creado con el que se cobra este pago
+    } = req.body;
     if ((!monto && !pagoOtroDia) || !cajaId || !negocioId) {
       return res.status(400).json({
         success: false,
@@ -280,6 +287,17 @@ const addEntrega = async (req, res) => {
       cajaId,
       ventaId,
     });
+
+    // Si el pago es con cheque, vincularlo. Antes cheque y entrega quedaban
+    // sin relacion y no habia forma de saber que cheque pago que.
+    if (chequeId) {
+      try {
+        await entregaModel.vincularCheque(chequeId, nuevaEntrega.id);
+      } catch (e) {
+        // El pago ya quedo registrado: no se revierte por esto, se loguea.
+        console.error("No se pudo vincular el cheque a la entrega:", e);
+      }
+    }
 
     let venta = null;
     // Si tiene ID de venta, actualizar su estado

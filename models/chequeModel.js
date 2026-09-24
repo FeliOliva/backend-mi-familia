@@ -16,6 +16,10 @@ const getAllCheques = async (limit, page) => {
             nombre: true,
           },
         },
+        // pago con el que se cobro (null en cheques cargados a mano)
+        entrega: {
+          select: { id: true, nroEntrega: true, ventaId: true, fechaCreacion: true },
+        },
       },
     });
     const totalCheques = await prisma.cheque.count();
@@ -40,6 +44,10 @@ const getChequeById = async (id) => {
             nombre: true,
           },
         },
+        // pago con el que se cobro (null en cheques cargados a mano)
+        entrega: {
+          select: { id: true, nroEntrega: true, ventaId: true, fechaCreacion: true },
+        },
       },
     });
   } catch (error) {
@@ -62,6 +70,10 @@ const getChequesByNegocio = async (negocioId, limit, page) => {
           select: {
             nombre: true,
           },
+        },
+        // pago con el que se cobro (null en cheques cargados a mano)
+        entrega: {
+          select: { id: true, nroEntrega: true, ventaId: true, fechaCreacion: true },
         },
       },
     });
@@ -122,6 +134,7 @@ const verificarChequeEnCierreCaja = async (chequeId) => {
         negocioId: true,
         monto: true,
         fechaCreacion: true,
+        entregaId: true,
       },
     });
 
@@ -157,22 +170,29 @@ const verificarChequeEnCierreCaja = async (chequeId) => {
 
     console.log("Buscando entregas entre:", fechaInicio, "y", fechaFin);
 
-    const entregas = await prisma.entregas.findMany({
-      where: {
-        negocioId: cheque.negocioId,
-        monto: cheque.monto,
-        metodoPagoId: metodoCheque.id,
-        fechaCreacion: {
-          gte: fechaInicio,
-          lte: fechaFin,
-        },
-      },
-      select: {
-        id: true,
-        cajaId: true,
-        fechaCreacion: true,
-      },
-    });
+    // Con el vinculo explicito se usa el pago exacto. La busqueda aproximada
+    // queda solo para cheques viejos que no se pudieron vincular.
+    const entregas = cheque.entregaId
+      ? await prisma.entregas.findMany({
+          where: { id: cheque.entregaId },
+          select: { id: true, cajaId: true, fechaCreacion: true },
+        })
+      : await prisma.entregas.findMany({
+          where: {
+            negocioId: cheque.negocioId,
+            monto: cheque.monto,
+            metodoPagoId: metodoCheque.id,
+            fechaCreacion: {
+              gte: fechaInicio,
+              lte: fechaFin,
+            },
+          },
+          select: {
+            id: true,
+            cajaId: true,
+            fechaCreacion: true,
+          },
+        });
 
     console.log("Entregas encontradas:", entregas);
 
