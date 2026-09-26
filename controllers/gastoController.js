@@ -64,8 +64,9 @@ const getTotalesGastosDelDiaPorCaja = async (req, res) => {
 
 const getGastosDelDia = async (req, res) => {
   try {
-    const { cajaId } = req.query;
-    const usuarioId = req.user?.id;
+    const { cajaId, todos } = req.query;
+    const esAdmin = Number(req.user?.rol) === 0;
+    const usuarioId = esAdmin && todos === "1" ? undefined : req.user?.id;
     const gastos = await gastoModel.getGastosDelDia({ usuarioId, cajaId });
     res.json(gastos);
   } catch (error) {
