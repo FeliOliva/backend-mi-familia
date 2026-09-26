@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const cajaControllers = require("../controllers/cajaControllers");
-const { verifyToken } = require("../auth");
+const { verifyToken, requireRol } = require("../auth");
 
 router.get("/caja", verifyToken, cajaControllers.getCaja);
 router.get(
@@ -23,5 +23,17 @@ router.patch(
   cajaControllers.cerrarCierreCajaPendiente
 );
 router.patch("/cierre-caja/:id", verifyToken, cajaControllers.editarCierreCaja);
+router.get(
+  "/cierre-caja/:id/ajustes",
+  verifyToken,
+  requireRol(0),
+  cajaControllers.getAjustesCierreCaja
+);
+router.post(
+  "/cierre-caja/:id/ajustes",
+  verifyToken,
+  requireRol(0),
+  cajaControllers.crearAjusteCierreCaja
+);
 
 module.exports = router;

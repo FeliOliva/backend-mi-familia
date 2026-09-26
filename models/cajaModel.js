@@ -108,14 +108,115 @@ const getCierresCaja = async () => {
       include: {
         usuario: { select: { usuario: true } },
         caja: { select: { nombre: true } },
+        ajustecierrecaja: {
+          select: {
+            id: true,
+            monto: true,
+            metodoPago: true,
+            fechaOperacion: true,
+            motivo: true,
+            negocio: { select: { nombre: true } },
+          },
+          orderBy: { fechaRegistro: "asc" },
+        },
       },
       orderBy: { fecha: "desc" },
-    });
+    }).then((cierres) =>
+      cierres.map((cierre) => {
+        const ajustes = cierre.ajustecierrecaja || [];
+        const ajusteTotal = ajustes.reduce((total, ajuste) => total + Number(ajuste.monto || 0), 0);
+        const ajusteEfectivo = ajustes
+          .filter((ajuste) => ajuste.metodoPago === "EFECTIVO")
+          .reduce((total, ajuste) => total + Number(ajuste.monto || 0), 0);
+
+        return {
+          ...cierre,
+          ajustes,
+          ajusteTotal,
+          ajusteEfectivo,
+          totalVentasAjustado: Number(cierre.totalVentas || 0) + ajusteTotal,
+          totalPagadoAjustado: Number(cierre.totalPagado || 0) + ajusteTotal,
+          totalEfectivoAjustado: Number(cierre.totalEfectivo || 0) + ajusteEfectivo,
+          totalEfectivoBrutoAjustado:
+            Number(cierre.totalEfectivoBruto || 0) + ajusteEfectivo,
+        };
+      })
+    );
   } catch (error) {
     console.error("Error al obtener cierres de caja:", error);
     throw new Error("Error al obtener cierres de caja");
   }
 };
+
+const crearAjusteCierreCaja = async ({
+  cierreId,
+  negocioId,
+  ventaId,
+  monto,
+  metodoPago,
+  fechaOperacion,
+  motivo,
+  usuarioId,
+}) => {
+  const cierre = await prisma.cierrecaja.findUnique({
+    where: { id: cierreId },
+    select: { id: true, cajaId: true, estado: true },
+  });
+
+  if (!cierre) throw new Error("Cierre no encontrado");
+  if (Number(cierre.estado) === 0) {
+    const error = new Error("Solo se pueden ajustar cierres cerrados");
+    error.code = "AJUSTE_CIERRE_ABIERTO";
+    throw error;
+  }
+
+  const negocio = await prisma.negocio.findUnique({
+    where: { id: negocioId },
+    select: { id: true },
+  });
+  if (!negocio) throw new Error("Negocio no encontrado");
+
+  if (ventaId) {
+    const venta = await prisma.venta.findUnique({
+      where: { id: ventaId },
+      select: { id: true, negocioId: true },
+    });
+    if (!venta) throw new Error("Venta no encontrada");
+    if (venta.negocioId !== negocioId) {
+      throw new Error("La venta no pertenece al negocio seleccionado");
+    }
+  }
+
+  return prisma.ajustecierrecaja.create({
+    data: {
+      cierreCajaId: cierre.id,
+      cajaId: cierre.cajaId,
+      negocioId,
+      ventaId: ventaId || null,
+      usuarioId,
+      monto,
+      metodoPago,
+      fechaOperacion: new Date(fechaOperacion),
+      motivo,
+    },
+    include: {
+      negocio: { select: { nombre: true } },
+      venta: { select: { nroVenta: true } },
+      usuario: { select: { usuario: true } },
+    },
+  });
+};
+
+const getAjustesCierreCaja = async (cierreId) =>
+  prisma.ajustecierrecaja.findMany({
+    where: { cierreCajaId: cierreId },
+    include: {
+      negocio: { select: { nombre: true } },
+      venta: { select: { nroVenta: true } },
+      usuario: { select: { usuario: true } },
+    },
+    orderBy: { fechaRegistro: "asc" },
+  });
 
 const crearCierreCajaPendiente = async (cajaId, totalVentas = 0) => {
   try {
@@ -305,6 +406,8 @@ const existeCierreCajaParaFecha = async (cajaId) => {
 };
 
 module.exports = {
+  crearAjusteCierreCaja,
+  getAjustesCierreCaja,
   getCajas,
   crearCierreCaja,
   getCierresCaja,

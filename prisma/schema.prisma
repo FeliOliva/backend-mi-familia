@@ -18,6 +18,7 @@ model caja {
   notacredito   notacredito[]
   usuario       usuario[]
   venta         venta[]
+  ajustecierrecaja ajustecierrecaja[]
 }
 
 // Catalogo de bancos. Reemplaza el texto libre de cheque.banco, que generaba
@@ -82,6 +83,7 @@ model cierrecaja {
   caja                 caja?                  @relation(fields: [cajaId], references: [id], map: "CierreCaja_cajaId_fkey")
   usuario              usuario?               @relation(fields: [usuarioId], references: [id], map: "CierreCaja_usuarioId_fkey")
   cierrecajametodopago cierrecajametodopago[]
+  ajustecierrecaja     ajustecierrecaja[]
 
   @@index([cajaId], map: "CierreCaja_cajaId_fkey")
   @@index([usuarioId], map: "CierreCaja_usuarioId_fkey")
@@ -95,6 +97,32 @@ model cierrecajametodopago {
   cierrecaja   cierrecaja @relation(fields: [cierreCajaId], references: [id], map: "CierreCajaMetodoPago_cierreCajaId_fkey")
 
   @@index([cierreCajaId], map: "CierreCajaMetodoPago_cierreCajaId_fkey")
+}
+
+// Ajustes administrativos posteriores a un cierre ya realizado. No modifica
+// el cierre original: permite registrar pagos omitidos con trazabilidad.
+model ajustecierrecaja {
+  id            Int        @id @default(autoincrement())
+  cierreCajaId  Int
+  cajaId        Int?
+  negocioId     Int
+  ventaId       Int?
+  usuarioId     Int
+  monto         Int
+  metodoPago    String     @default("EFECTIVO")
+  fechaOperacion DateTime
+  motivo        String     @db.VarChar(500)
+  fechaRegistro DateTime   @default(now())
+
+  cierrecaja    cierrecaja @relation(fields: [cierreCajaId], references: [id], map: "AjusteCierreCaja_cierreCajaId_fkey")
+  caja          caja?      @relation(fields: [cajaId], references: [id], map: "AjusteCierreCaja_cajaId_fkey")
+  negocio       negocio    @relation(fields: [negocioId], references: [id], map: "AjusteCierreCaja_negocioId_fkey")
+  venta         venta?     @relation(fields: [ventaId], references: [id], map: "AjusteCierreCaja_ventaId_fkey")
+  usuario       usuario    @relation(fields: [usuarioId], references: [id], map: "AjusteCierreCaja_usuarioId_fkey")
+
+  @@index([cierreCajaId])
+  @@index([negocioId])
+  @@index([ventaId])
 }
 
 model detalleventa {
@@ -157,6 +185,7 @@ model negocio {
   venta             venta[]
   saldoinicial      saldoinicial[]
   presupuesto       presupuesto[]
+  ajustecierrecaja  ajustecierrecaja[]
 }
 
 model saldoinicial {
@@ -292,6 +321,7 @@ model usuario {
   caja          caja?        @relation(fields: [cajaId], references: [id], map: "Usuario_cajaId_fkey")
   gastos        gasto[]
   venta         venta[]
+  ajustecierrecaja ajustecierrecaja[]
 
   @@index([cajaId], map: "Usuario_cajaId_fkey")
 }
@@ -310,6 +340,7 @@ model venta {
   usuarioId      Int?
   detalleventa   detalleventa[]
   entregas       entregas[]
+  ajustecierrecaja ajustecierrecaja[]
   caja           caja?          @relation(fields: [cajaId], references: [id], map: "Venta_cajaId_fkey")
   negocio        negocio        @relation(fields: [negocioId], references: [id], map: "Venta_negocioId_fkey")
   usuario        usuario?       @relation(fields: [usuarioId], references: [id], map: "Venta_usuarioId_fkey")

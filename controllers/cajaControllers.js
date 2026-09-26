@@ -1,5 +1,75 @@
 const cajaModel = require("../models/cajaModel");
 
+const crearAjusteCierreCaja = async (req, res) => {
+  try {
+    const cierreId = parseInt(req.params.id, 10);
+    const {
+      negocioId,
+      ventaId,
+      monto,
+      metodoPago = "EFECTIVO",
+      fechaOperacion,
+      motivo,
+    } = req.body;
+
+    if (!Number.isInteger(cierreId) || cierreId <= 0) {
+      return res.status(400).json({ error: "ID de cierre inválido" });
+    }
+    if (!Number.isInteger(Number(negocioId)) || Number(negocioId) <= 0) {
+      return res.status(400).json({ error: "El negocio es obligatorio" });
+    }
+    if (!Number.isInteger(Number(monto)) || Number(monto) <= 0) {
+      return res.status(400).json({ error: "El monto debe ser un entero mayor a cero" });
+    }
+    if (!fechaOperacion || !motivo || String(motivo).trim().length < 5) {
+      return res.status(400).json({ error: "La fecha y el motivo son obligatorios" });
+    }
+    if (Number.isNaN(new Date(fechaOperacion).getTime())) {
+      return res.status(400).json({ error: "La fecha de operación es inválida" });
+    }
+    const metodosPermitidos = new Set([
+      "EFECTIVO",
+      "TRANSFERENCIA/QR",
+      "TARJETA DEBITO",
+      "TARJETA CREDITO",
+      "CHEQUE",
+    ]);
+    if (!metodosPermitidos.has(String(metodoPago).trim().toUpperCase())) {
+      return res.status(400).json({ error: "Método de pago inválido" });
+    }
+
+    const ajuste = await cajaModel.crearAjusteCierreCaja({
+      cierreId,
+      negocioId: Number(negocioId),
+      ventaId: ventaId ? Number(ventaId) : null,
+      monto: Number(monto),
+      metodoPago: String(metodoPago).trim().toUpperCase(),
+      fechaOperacion,
+      motivo: String(motivo).trim(),
+      usuarioId: req.user.id,
+    });
+
+    res.status(201).json(ajuste);
+  } catch (error) {
+    console.error("Error al crear ajuste de cierre:", error);
+    const status = error.code === "AJUSTE_CIERRE_ABIERTO" ? 409 : 400;
+    res.status(status).json({ error: error.message || "Error al crear ajuste de cierre" });
+  }
+};
+
+const getAjustesCierreCaja = async (req, res) => {
+  try {
+    const cierreId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cierreId) || cierreId <= 0) {
+      return res.status(400).json({ error: "ID de cierre inválido" });
+    }
+    res.json(await cajaModel.getAjustesCierreCaja(cierreId));
+  } catch (error) {
+    console.error("Error al obtener ajustes de cierre:", error);
+    res.status(500).json({ error: "Error al obtener ajustes de cierre" });
+  }
+};
+
 const getCaja = async (req, res) => {
   try {
     const cajas = await cajaModel.getCajas();
@@ -106,6 +176,8 @@ const getDetalleVentasPorCierre = async (req, res) => {
 };
 
 module.exports = {
+  crearAjusteCierreCaja,
+  getAjustesCierreCaja,
   getCaja,
   crearCierreCaja,
   getCierresCaja,
