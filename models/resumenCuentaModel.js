@@ -1,6 +1,34 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+// El saldo inicial representa deuda previa al historial cargado, aunque su
+// registro se haya creado después de algunas ventas o entregas.
+const getSaldoAnteriorByNegocio = async (negocioId, fechaInicio) => {
+  const [saldoInicial, ventas, entregas, notasCredito] = await Promise.all([
+    prisma.saldoinicial.findUnique({
+      where: { negocioId },
+      select: { monto: true },
+    }),
+    prisma.venta.aggregate({
+      where: { negocioId, fechaCreacion: { lt: fechaInicio } },
+      _sum: { total: true },
+    }),
+    prisma.entregas.aggregate({
+      where: { negocioId, fechaCreacion: { lt: fechaInicio } },
+      _sum: { monto: true },
+    }),
+    prisma.notacredito.aggregate({
+      where: { negocioId, fechaCreacion: { lt: fechaInicio } },
+      _sum: { monto: true },
+    }),
+  ]);
+
+  return Number(saldoInicial?.monto || 0)
+    + Number(ventas._sum.total || 0)
+    - Number(entregas._sum.monto || 0)
+    - Number(notasCredito._sum.monto || 0);
+};
+
 const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
   const [ventas, entregas, notasCredito, saldoInicial] = await Promise.all([
     prisma.venta.findMany({
@@ -267,6 +295,7 @@ const getResumenDia = async (cajaId) => {
 };
 
 module.exports = {
+  getSaldoAnteriorByNegocio,
   getResumenCuentaByNegocio,
   getResumenDia,
 };

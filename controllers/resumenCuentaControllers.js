@@ -1,5 +1,39 @@
 const resumenCuentaModel = require("../models/resumenCuentaModel");
 
+const parsearFechaLocal = (fecha, finDeDia = false) => {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  return new Date(
+    anio,
+    mes - 1,
+    dia,
+    finDeDia ? 23 : 0,
+    finDeDia ? 59 : 0,
+    finDeDia ? 59 : 0,
+    finDeDia ? 999 : 0
+  );
+};
+
+const getSaldoAnteriorByNegocio = async (req, res) => {
+  try {
+    const negocioId = Number(req.params.id);
+    const { startDate } = req.query;
+    if (!Number.isInteger(negocioId) || !/^\d{4}-\d{2}-\d{2}$/.test(startDate || "")) {
+      return res.status(400).json({ error: "El negocio y la fecha de inicio son obligatorios" });
+    }
+
+    const fechaInicio = parsearFechaLocal(startDate);
+    if (Number.isNaN(fechaInicio.getTime())) {
+      return res.status(400).json({ error: "La fecha de inicio es inválida" });
+    }
+
+    const saldoAnterior = await resumenCuentaModel.getSaldoAnteriorByNegocio(negocioId, fechaInicio);
+    res.json({ saldoAnterior });
+  } catch (error) {
+    console.error("Error al obtener el saldo anterior del negocio:", error);
+    res.status(500).json({ error: "Error al obtener el saldo anterior del negocio" });
+  }
+};
+
 const getResumenCuentaByNegocio = async (req, res) => {
   try {
     const { id } = req.params;
@@ -18,30 +52,8 @@ const getResumenCuentaByNegocio = async (req, res) => {
         .status(400)
         .json({ error: "Las fechas de inicio y fin son obligatorias" });
     }
-    // Parsear fechas y asegurar que incluyan todo el día en la zona horaria local
-    // Parsear el string "YYYY-MM-DD" correctamente para evitar interpretación UTC
-    const [añoInicioStr, mesInicioStr, diaInicioStr] = startDate.split('-');
-    const añoInicio = parseInt(añoInicioStr, 10);
-    const mesInicio = parseInt(mesInicioStr, 10) - 1; // Los meses en JS son 0-indexed
-    const diaInicio = parseInt(diaInicioStr, 10);
-    const filterStartDate = new Date(añoInicio, mesInicio, diaInicio, 0, 0, 0, 0);
-    
-    const [añoFinStr, mesFinStr, diaFinStr] = endDate.split('-');
-    const añoFin = parseInt(añoFinStr, 10);
-    const mesFin = parseInt(mesFinStr, 10) - 1; // Los meses en JS son 0-indexed
-    const diaFin = parseInt(diaFinStr, 10);
-    
-    // Crear fecha de fin del día en hora local (23:59:59.999)
-    const fechaFinLocal = new Date(añoFin, mesFin, diaFin, 23, 59, 59, 999);
-    
-    // Extender el rango hasta el final del día siguiente en hora local
-    // Esto asegura que incluya todos los registros del día solicitado en UTC
-    // Ejemplo: Si pedimos hasta el 28 y estamos en UTC-3:
-    // - Fin del día 28 local = 02:59:59 del 29 UTC
-    // - Pero un registro a las 00:59:54 del 28 local = 03:59:54 del 28 UTC
-    // - Necesitamos incluir hasta el final del día siguiente (29) para capturar todos los registros del 28
-    const fechaFinSiguienteDia = new Date(añoFin, mesFin, diaFin + 1, 23, 59, 59, 999);
-    const filterEndDate = fechaFinSiguienteDia;
+    const filterStartDate = parsearFechaLocal(startDate);
+    const filterEndDate = parsearFechaLocal(endDate, true);
     
     console.log("Fechas procesadas - Inicio:", filterStartDate.toISOString(), "Fin:", filterEndDate.toISOString());
     const resumenData = await resumenCuentaModel.getResumenCuentaByNegocio(
@@ -77,6 +89,7 @@ const resumenDia = async (req, res) => {
 };
 
 module.exports = {
+  getSaldoAnteriorByNegocio,
   getResumenCuentaByNegocio,
   resumenDia,
 };
