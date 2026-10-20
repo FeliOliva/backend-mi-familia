@@ -1,6 +1,44 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+const getSaldoAnteriorByNegocio = async (negocioId, fechaInicio) => {
+  const saldoInicial = await (prisma.saldoinicial?.findUnique({
+      where: { negocioId },
+      select: { monto: true, fechaCreacion: true },
+    }).catch(() => null) ?? Promise.resolve(null));
+
+  const fechaDesdeMovimientos = saldoInicial && saldoInicial.fechaCreacion < fechaInicio
+    ? saldoInicial.fechaCreacion
+    : null;
+  const filtroFecha = fechaDesdeMovimientos
+    ? { gt: fechaDesdeMovimientos, lt: fechaInicio }
+    : { lt: fechaInicio };
+
+  const [ventas, entregas, notasCredito] = await Promise.all([
+    prisma.venta.aggregate({
+      where: { negocioId, fechaCreacion: filtroFecha },
+      _sum: { total: true },
+    }),
+    prisma.entregas.aggregate({
+      where: { negocioId, fechaCreacion: filtroFecha },
+      _sum: { monto: true },
+    }),
+    prisma.notacredito.aggregate({
+      where: { negocioId, fechaCreacion: filtroFecha },
+      _sum: { monto: true },
+    }),
+  ]);
+
+  const montoSaldoInicial = fechaDesdeMovimientos
+    ? Number(saldoInicial.monto || 0)
+    : 0;
+
+  return montoSaldoInicial
+    + Number(ventas._sum.total || 0)
+    - Number(entregas._sum.monto || 0)
+    - Number(notasCredito._sum.monto || 0);
+};
+
 const getResumenCuentaByNegocio = async (negocioId, startDate, endDate) => {
   const [ventas, entregas, notasCredito, saldoInicial] = await Promise.all([
     prisma.venta.findMany({
@@ -268,5 +306,6 @@ const getResumenDia = async (cajaId) => {
 
 module.exports = {
   getResumenCuentaByNegocio,
+  getSaldoAnteriorByNegocio,
   getResumenDia,
 };
